@@ -69,7 +69,8 @@ export default function EmployeeDirectory({
     emergencyContactPhone: "",
     emergencyContactRelation: "",
     ethnicity: "",
-    citizenship: ""
+    citizenship: "",
+    residenceAddress: ""
   });
 
   const t = {
@@ -119,7 +120,8 @@ export default function EmployeeDirectory({
       emergencyContactPhone: "",
       emergencyContactRelation: "",
       ethnicity: "",
-      citizenship: ""
+      citizenship: "",
+      residenceAddress: ""
     });
     setEditingEmployee(null);
     setShowAddModal(true);
@@ -142,7 +144,8 @@ export default function EmployeeDirectory({
       emergencyContactPhone: emp.emergencyContactPhone || "",
       emergencyContactRelation: emp.emergencyContactRelation || "",
       ethnicity: emp.ethnicity || "",
-      citizenship: emp.citizenship || ""
+      citizenship: emp.citizenship || "",
+      residenceAddress: emp.residenceAddress || ""
     });
     setShowAddModal(true);
   };
@@ -170,7 +173,8 @@ export default function EmployeeDirectory({
           emergencyContactPhone: formData.emergencyContactPhone,
           emergencyContactRelation: formData.emergencyContactRelation,
           ethnicity: formData.ethnicity,
-          citizenship: formData.citizenship
+          citizenship: formData.citizenship,
+          residenceAddress: formData.residenceAddress
         });
       } else {
         await onAddEmployee({
@@ -188,7 +192,8 @@ export default function EmployeeDirectory({
           emergencyContactPhone: formData.emergencyContactPhone,
           emergencyContactRelation: formData.emergencyContactRelation,
           ethnicity: formData.ethnicity,
-          citizenship: formData.citizenship
+          citizenship: formData.citizenship,
+          residenceAddress: formData.residenceAddress
         });
       }
       stopCamera();
@@ -517,6 +522,16 @@ export default function EmployeeDirectory({
                           {language === "ku" ? "ڕەگەزنامە" : "Citizenship"}
                         </span>
                         <span className="font-bold text-slate-800 bg-slate-100/60 px-2 py-0.5 rounded-lg border border-slate-200/40 text-[11px]">{emp.citizenship}</span>
+                      </div>
+                    )}
+
+                    {emp.residenceAddress && (
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 font-medium text-slate-500">
+                          <span className="text-xs">📍</span>
+                          {language === "ku" ? "ناونیشانی نیشتەجێبوون" : "Residence Address"}
+                        </span>
+                        <span className="font-bold text-slate-800 bg-slate-100/60 px-2 py-0.5 rounded-lg border border-slate-200/40 text-[11px]">{emp.residenceAddress}</span>
                       </div>
                     )}
 
@@ -884,6 +899,20 @@ export default function EmployeeDirectory({
                       className="w-full p-2.5 bg-white/70 border border-slate-200 rounded-xl focus:ring-1 focus:ring-amber-500 text-xs disabled:opacity-75"
                       value={formData.citizenship}
                       onChange={(e) => setFormData({ ...formData, citizenship: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="col-span-full">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {language === "ku" ? "📍 ناونیشانی نیشتەجێبوون" : "📍 Residence Address"}
+                    </label>
+                    <input
+                      type="text"
+                      disabled={isReadOnly}
+                      placeholder={language === "ku" ? "بۆ نموونە: هەولێر - گەڕەکی نەورۆز" : "e.g. Erbil - Nawroz Quarter"}
+                      className="w-full p-2.5 bg-white/70 border border-slate-200 rounded-xl focus:ring-1 focus:ring-amber-500 text-xs disabled:opacity-75"
+                      value={formData.residenceAddress || ""}
+                      onChange={(e) => setFormData({ ...formData, residenceAddress: e.target.value })}
                     />
                   </div>
                 </div>

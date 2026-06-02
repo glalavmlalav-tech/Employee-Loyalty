@@ -104,6 +104,7 @@ export interface Employee {
   emergencyContactRelation?: string; // پەیوەندی کەسەکە (کەسەکە چییەتی)
   ethnicity?: string; // نەتەوە (کورد، عەرەب، فارس، کلدانی ئەشوری...)
   citizenship?: string; // ڕەگەزنامە (عیراقی، ئێرانی، هیندستانی...)
+  residenceAddress?: string; // ناونیشانی نیشتەجێبوون (بۆ نموونە: هەولێر - گەڕەکی نەورۆز)
   createdBy?: string; // Username of creator
 }
 

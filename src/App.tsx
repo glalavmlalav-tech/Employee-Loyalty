@@ -1212,26 +1212,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Seed demo dataset fallback warning banner */}
-          {employees.length === 0 && !dbLoading && (
-            <div className="glass-panel bg-amber-500/10 backdrop-blur-lg rounded-[24px] border border-amber-500/20 p-6 flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <span className="p-2.5 bg-amber-500/20 border border-amber-500/30 text-amber-600 rounded-xl flex-shrink-0 animate-pulse">
-                  <AlertCircle className="w-6 h-6" />
-                </span>
-                <p className="text-slate-800 text-sm font-bold pr-2 text-right md:text-left font-sans leading-relaxed">
-                  {t.demoWarning}
-                </p>
-              </div>
-              <button
-                onClick={handlePrepopulateDatabase}
-                className="px-5 py-3 glass-btn-amber text-xs font-extrabold rounded-2xl transition duration-150 flex items-center gap-2 flex-shrink-0 shadow-md"
-              >
-                <Sparkles className="w-4 h-4" />
-                {t.demoWarningBtn}
-              </button>
-            </div>
-          )}
+
 
           {/* Active component view rendered strictly here */}
           <div className="transition-all duration-300">
