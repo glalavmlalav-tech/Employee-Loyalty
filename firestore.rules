@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmployee(data) {
+      return data.id is string
+        && data.name is string && data.name.size() <= 200
+        && data.business in ['linia', 'massimo', 'liston']
+        && data.role is string && data.role.size() <= 150
+        && data.birthDate is string && data.birthDate.size() == 10
+        && data.maritalStatus in ['single', 'married']
+        && (data.maritalStatus != 'married' || (data.marriageAnniversary is string && data.marriageAnniversary.size() == 10))
+        && data.hireDate is string && data.hireDate.size() == 10
+        && data.loyaltyPoints is int
+        && data.status in ['active', 'suspended', 'retired'];
+    }
+
+    function isValidActivity(data) {
+      return data.id is string
+        && data.title is string && data.title.size() <= 200
+        && data.description is string && data.description.size() <= 4000
+        && data.month is string && data.month.size() <= 20
+        && data.status in ['suggested', 'scheduled', 'completed'];
+    }
+
+    function isValidGift(data) {
+      return data.id is string
+        && data.employeeId is string
+        && data.employeeName is string && data.employeeName.size() <= 200
+        && data.occasionType in ['birthday', 'marriage_anniversary']
+        && data.occasionDate is string && data.occasionDate.size() == 10
+        && data.status in ['pending', 'prepared', 'delivered', 'cancelled'];
+    }
+
+    // Employees rules
+    match /employees/{employeeId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(employeeId) && isValidEmployee(request.resource.data);
+      allow update: if isSignedIn() && isValidId(employeeId) && isValidEmployee(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(employeeId);
+    }
+
+    // Activities rules
+    match /activities/{activityId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(activityId) && isValidActivity(request.resource.data);
+      allow update: if isSignedIn() && isValidId(activityId) && isValidActivity(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(activityId);
+    }
+
+    // Gift logs rules
+    match /gifts/{giftId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(giftId) && isValidGift(request.resource.data);
+      allow update: if isSignedIn() && isValidId(giftId) && isValidGift(request.resource.data);
+      allow delete: if isSignedIn() && isValidId(giftId);
+    }
+
+    // App Users rules
+    match /app_users/{username} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

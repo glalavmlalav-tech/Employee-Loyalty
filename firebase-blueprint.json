@@ -1,0 +1,93 @@
+{
+  "entities": {
+    "Employee": {
+      "title": "Employee",
+      "description": "Information about an employee of one of the three businesses.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "description": "Full name of the employee" },
+        "business": { 
+          "type": "string", 
+          "enum": ["linia", "massimo", "liston"],
+          "description": "Which and where they work: Linia (Darstashi), Massimo (Stone Gallery), or Liston"
+        },
+        "role": { "type": "string", "description": "Job title or position" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "birthDate": { "type": "string", "format": "date", "description": "YYYY-MM-DD format" },
+        "maritalStatus": { "type": "string", "enum": ["single", "married"] },
+        "marriageAnniversary": { "type": "string", "format": "date", "description": "YYYY-MM-DD, optional if single" },
+        "hireDate": { "type": "string", "format": "date", "description": "YYYY-MM-DD" },
+        "loyaltyPoints": { "type": "integer", "description": "Points reflecting their active contributions and loyalty metric" },
+        "status": { "type": "string", "enum": ["active", "suspended", "retired"] }
+      },
+      "required": ["id", "name", "business", "role", "birthDate", "maritalStatus", "hireDate", "loyaltyPoints", "status"]
+    },
+    "LoyaltyActivity": {
+      "title": "LoyaltyActivity",
+      "description": "Suggested or executed monthly activities focused on team morale and building employee loyalty.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string", "description": "Detailed Kurdish / English breakdown of the action" },
+        "month": { "type": "string", "description": "The target month, e.g. '05' or 'May'" },
+        "year": { "type": "string" },
+        "business": { "type": "string", "description": "Specific business or 'all'" },
+        "costEstimate": { "type": "string" },
+        "status": { "type": "string", "enum": ["suggested", "scheduled", "completed"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "description", "month", "status", "createdAt"]
+    },
+    "GiftLog": {
+      "title": "GiftLog",
+      "description": "Log of prepared gifts for anniversaries and birthdays.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "occasionType": { "type": "string", "enum": ["birthday", "marriage_anniversary"] },
+        "occasionDate": { "type": "string" },
+        "giftIdea": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "prepared", "delivered", "cancelled"] },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "employeeName", "occasionType", "occasionDate", "status", "updatedAt"]
+    },
+    "AppUser": {
+      "title": "AppUser",
+      "description": "User accounts for the administration portal.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["super_admin", "admin"] },
+        "business": { "type": "string", "enum": ["linia", "massimo", "liston", "all"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "username", "password", "name", "role", "business", "createdAt"]
+    }
+  },
+  "firestore": {
+    "employees/{employeeId}": {
+      "schema": "Employee",
+      "description": "Employee documents"
+    },
+    "activities/{activityId}": {
+      "schema": "LoyaltyActivity",
+      "description": "Monthly loyalty activity suggestions and logs"
+    },
+    "gifts/{giftId}": {
+      "schema": "GiftLog",
+      "description": "Gifts log tracker"
+    },
+    "app_users/{username}": {
+      "schema": "AppUser",
+      "description": "User credential profiles"
+    }
+  }
+}
