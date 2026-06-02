@@ -257,9 +257,9 @@ export default function App() {
           }
           return prev;
         });
-      } else if (appUsersLoaded) {
+      } else if (appUsersLoaded && currentUser && !currentUser.isAnonymous) {
         setUserSession((prev) => {
-          if (prev !== null) {
+          if (prev !== null && prev.email) {
             localStorage.removeItem("app_user_session");
             return null;
           }
@@ -342,18 +342,29 @@ export default function App() {
 
         // Seeding super-admin owner if not present once loaded
         const hasOwner = userList.some(
-          (u) => (u.email || "").toLowerCase() === "glalavmlalav@gmail.com" || u.username === "glalavmlalav@gmail.com"
+          (u) => u.username === "glalavmlalav" || u.username === "admin"
         );
         if (!hasOwner) {
-          setDoc(doc(db, "app_users", "glalavmlalav@gmail.com"), {
-            id: "glalavmlalav@gmail.com",
-            username: "glalavmlalav@gmail.com",
+          setDoc(doc(db, "app_users", "glalavmlalav"), {
+            id: "glalavmlalav",
+            username: "glalavmlalav",
+            password: "admin",
             email: "glalavmlalav@gmail.com",
+            name: "Super Admin (glalavmlalav)",
+            role: "super_admin",
+            business: "all",
+            createdAt: new Date().toISOString()
+          }).catch((err) => console.log("Owner seeding backup failed:", err));
+
+          setDoc(doc(db, "app_users", "admin"), {
+            id: "admin",
+            username: "admin",
+            password: "admin",
             name: "Super Admin (Owner)",
             role: "super_admin",
             business: "all",
             createdAt: new Date().toISOString()
-          }).catch((err) => console.log("Owner seeding backup bypassed or failed:", err));
+          }).catch((err) => console.log("Owner seeding backup failed:", err));
         }
       },
       (error) => {
@@ -477,9 +488,10 @@ export default function App() {
     // Hard fallback backup for the owner
     if (!matched && cleanEmail === "glalavmlalav@gmail.com") {
       matched = {
-        id: "glalavmlalav@gmail.com",
-        username: "glalavmlalav@gmail.com",
+        id: "glalavmlalav",
+        username: "glalavmlalav",
         email: "glalavmlalav@gmail.com",
+        password: "admin",
         name: "Super Admin (Owner)",
         role: "super_admin",
         business: "all",
@@ -512,6 +524,46 @@ export default function App() {
     return false;
   };
 
+  // Custom Username & Password validation callback
+  const handleCredentialsLogin = async (usernameInput: string, passwordInput: string): Promise<{ success: boolean; error?: string }> => {
+    const cleanUsername = usernameInput.toLowerCase().trim();
+    
+    // Look up in loaded appUsers reactive memory
+    let matched = appUsers.find(
+      (u) => u.username.toLowerCase() === cleanUsername
+    );
+
+    // Hard seeding fallbacks if firebase is blank or not seeded yet
+    if (!matched && (cleanUsername === "glalavmlalav" || cleanUsername === "admin") && passwordInput === "admin") {
+      matched = {
+        id: cleanUsername,
+        username: cleanUsername,
+        password: "admin",
+        name: "Super Admin (Owner)",
+        role: "super_admin",
+        business: "all",
+        createdAt: new Date().toISOString()
+      };
+    }
+
+    if (matched) {
+      if (matched.password === passwordInput) {
+        localStorage.setItem("app_user_session", JSON.stringify(matched));
+        setUserSession(matched);
+        if (matched.role === "admin") {
+          setActiveTab("employees");
+        } else {
+          setActiveTab("alerts");
+        }
+        return { success: true };
+      } else {
+        return { success: false, error: language === "ku" ? "کۆدی تێپەڕەوشە (پاسۆرد) هەڵەیە!" : "Incorrect password." };
+      }
+    }
+
+    return { success: false, error: language === "ku" ? "ناوی بەکارهێنەر لە سیستەمدا بوونی نییە!" : "Username does not exist." };
+  };
+
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -526,7 +578,7 @@ export default function App() {
 
   const handleAddUser = async (userFields: Omit<AppUser, "id" | "createdAt">) => {
     try {
-      const docId = userFields.email ? userFields.email.toLowerCase().trim() : userFields.username.toLowerCase().trim();
+      const docId = userFields.username.toLowerCase().trim();
       await setDoc(doc(db, "app_users", docId), {
         id: docId,
         ...userFields,
@@ -679,17 +731,21 @@ export default function App() {
               <Lock className="w-9 h-9 text-rose-500 animate-pulse-slow" />
             </div>
             <h2 className="text-2xl font-display font-black text-slate-800 leading-tight">
-              {language === "ku" ? "چوونەژوورەوەی ستاف" : "Staff Google Sign-In"}
+              {language === "ku" ? "داخڵبوونی ئەدمین و ستاف" : "Admin & Staff Portal"}
             </h2>
             <p className="text-slate-500 text-xs mt-2 leading-relaxed font-sans">
               {language === "ku" 
-                ? "تکایە بە هەژماری گووگڵەکەت داخڵ ببە بۆ دڵنیابوونەوە لە دەسەڵاتەکانت لێرەدا" 
-                : "Secure permission-based sign-in using your verified corporate Google account."}
+                ? "تکایە ناوی بەکارهێنەر و تێپەڕەوشە بنووسە بۆ چوونەژوورەوە" 
+                : "Please enter your custom credentials to gain role-based access."}
             </p>
           </div>
 
           {/* Render secure staff login form component */}
-          <StaffLoginForm language={language} onLoginSuccess={handleGoogleLoginSuccess} />
+          <StaffLoginForm 
+            language={language} 
+            onLoginSuccess={handleGoogleLoginSuccess} 
+            onLoginWithCredentials={handleCredentialsLogin}
+          />
 
           {/* Real-time sync hint banner */}
           <div className="mt-8 pt-6 border-t border-white/40 flex items-center gap-3 text-slate-500 text-[10px] font-medium">

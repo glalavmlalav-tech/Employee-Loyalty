@@ -4,11 +4,14 @@ import {
   UserPlus, 
   Trash2, 
   Shield, 
-  Mail, 
   Building,
   UserCheck,
   X,
-  Edit
+  Edit,
+  Eye,
+  EyeOff,
+  User,
+  Key
 } from "lucide-react";
 import { AppUser, BusinessId, BUSINESSES } from "../types";
 
@@ -30,31 +33,37 @@ export default function SettingsPanel({
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [userToDelete, setUserToDelete] = useState<AppUser | null>(null);
+  
+  // Toggles for masking passwords
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+
   const [formData, setFormData] = useState({
-    email: "",
+    username: "",
+    password: "",
     name: "",
     role: "admin" as "super_admin" | "admin",
     business: "massimo" as BusinessId | "all"
   });
 
   const t = {
-    title: language === "ku" ? "ڕێکخستنی ئەکاونتەکانی سیستەم" : "System User & Credentials Settings",
+    title: language === "ku" ? "بەڕێوەبردنی ئەکاونتەکانی سیستەم" : "System Admins & Credentials Manager",
     desc: language === "ku" 
-      ? "تایبەت بە بەڕێوەبردنی ئەکاونتەکان بە بێ پاسوۆرد، بە بەکارهێنانی ئیمەیڵی گووگڵ (Gmail) بەو شێوازەی لە بەشی شەیر زیادی دەکەیت" 
-      : "Manage staff logins passwordlessly using verified Google accounts matching your shared users list.",
-    addUserBtn: language === "ku" ? "تۆمارکردنی ئیمەیڵی نوێ" : "Register Google Account",
-    editUserBtn: language === "ku" ? "دەستکاریکردنی دەسەڵاتەکان" : "Edit Account Roles",
-    emailLabel: language === "ku" ? "ئیمەیڵی گووگڵ (Gmail)" : "Google Email (Gmail)",
-    fullName: language === "ku" ? "ناوی تەواوی بەکارهێنەر" : "Full Name / Owner",
-    role: language === "ku" ? "دەسەڵات / ڕۆڵ" : "System Role",
+      ? "تایبەت بە زیادکردن و ڕێکخستنی ئەکاونتەکانی ئەدمین. دەتوانیت بۆ هەر ئەدمینێک ناو (Username) و تێپەڕەوشە (Password) دابنێیت بە بێ ئەوەی پێویست بە ئیمەیڵ بکات و لەسەر هەموو ئامێرەکان هاوکات دەبێت." 
+      : "Manage staff logins. Set up custom Username and Password credentials for showroom and factory admins with direct live multi-device synchronization.",
+    addUserBtn: language === "ku" ? "درۆستکردنی ئەدمینی نوێ" : "Create New Admin",
+    editUserBtn: language === "ku" ? "دەستکاریکردنی دەسەڵاتەکان" : "Edit Admin Roles",
+    usernameLabel: language === "ku" ? "ناوی بەکارهێنەر (Username)" : "Username",
+    passwordLabel: language === "ku" ? "وشەی تێپەڕ / پاسۆرد (Password)" : "Password",
+    fullName: language === "ku" ? "ناوی تەواو" : "Full Name / Operator Name",
+    role: language === "ku" ? "دەسەڵات / ڕۆڵ" : "System Access Role",
     business: language === "ku" ? "کۆمپانیا / شۆورووم" : "Assigned Branch Showroom",
-    save: language === "ku" ? "پاشەکەوتکردن" : "Create Account",
+    save: language === "ku" ? "دروستکردنی ئەکاونت" : "Create Account",
     editSave: language === "ku" ? "پاشەکەوتکردنی گۆڕانکارییەکان" : "Save Changes",
     cancel: language === "ku" ? "پاشگەزبوونەوە" : "Cancel",
     confirmDelete: language === "ku" ? "ئایا دڵنیای لە سڕینەوەی ئەم هەژمارە؟" : "Are you sure you want to delete this user? They will lose access instantly.",
     emptyUsers: language === "ku" ? "هیچ یوزەرێکی لاوەکی دروست نەکراوە." : "No secondary accounts registered yet.",
-    roleSuperAdmin: language === "ku" ? "ئەدمینی گشتی (هەموو بەشەکان)" : "Super Admin (Full Access)",
-    roleAdmin: language === "ku" ? "ئەدمینی شۆوروم (تەنها کارمەندانی خۆی)" : "Showroom Admin (Restricted)",
+    roleSuperAdmin: language === "ku" ? "سوپەر ئەدمین (هەموو بەشەکان)" : "Super Admin (Full Access)",
+    roleAdmin: language === "ku" ? "ئەدمینی لقی دیاریکراو (تەنها بەشی خۆی)" : "Showroom/Factory Admin (Restricted)",
     assignedAll: language === "ku" ? "سەرجەم لایەنەکان" : "All Businesses",
     creationDate: language === "ku" ? "ڕێکەوتی دروستکردن" : "Date Created"
   };
@@ -62,7 +71,8 @@ export default function SettingsPanel({
   const handleOpenAdd = () => {
     setEditingUser(null);
     setFormData({
-      email: "",
+      username: "",
+      password: "",
       name: "",
       role: "admin",
       business: "massimo"
@@ -73,7 +83,8 @@ export default function SettingsPanel({
   const handleOpenEdit = (user: AppUser) => {
     setEditingUser(user);
     setFormData({
-      email: user.email || user.username || "",
+      username: user.username,
+      password: user.password || "",
       name: user.name,
       role: user.role,
       business: user.business
@@ -86,31 +97,37 @@ export default function SettingsPanel({
     setEditingUser(null);
   };
 
+  const togglePasswordVisibility = (uid: string) => {
+    setShowPasswords(prev => ({
+      ...prev,
+      [uid]: !prev[uid]
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.email.trim() || !formData.name.trim()) {
-      alert(language === "ku" ? "تکایە هەموو کێڵگەکان پڕبکەرەوە" : "Please fill in all inputs.");
+    if (!formData.username.trim() || !formData.password.trim() || !formData.name.trim()) {
+      alert(language === "ku" ? "تکایە هەموو کێڵگەکان بە دروستی پڕبکەرەوە" : "Please fill in all required fields.");
       return;
     }
 
-    const cleanEmail = formData.email.trim().toLowerCase().replace(/\s+/g, "");
+    const cleanUsername = formData.username.trim().toLowerCase().replace(/\s+/g, "");
 
     if (!editingUser) {
       // Check if user already exists
       const exists = appUsers.some(
-        u => (u.email || "").toLowerCase() === cleanEmail || u.username.toLowerCase() === cleanEmail
+        u => (u.username || "").toLowerCase() === cleanUsername
       );
       if (exists) {
-        alert(language === "ku" ? "ئەم ئیمەیڵە پێشتر تۆمار کراوە!" : "This email address is already taken!");
+        alert(language === "ku" ? "ئەم ناوی بەکارهێنەرە پێشتر تۆمار کراوە! ناوی تر تاقی بکەرەوە." : "This username is already taken! Try another one.");
         return;
       }
     }
 
     try {
       await onAddUser({
-        username: cleanEmail,
-        email: cleanEmail,
-        password: "google_passwordless", // backward compatibility synonym
+        username: cleanUsername,
+        password: formData.password.trim(),
         name: formData.name.trim(),
         role: formData.role,
         business: formData.business
@@ -122,20 +139,22 @@ export default function SettingsPanel({
     }
   };
 
-  const isOwner = (currentUserEmail || "").toLowerCase().trim() === "glalavmlalav@gmail.com";
+  const isOwner = (currentUserEmail || "").toLowerCase().trim() === "glalavmlalav@gmail.com" ||
+                  (currentUserEmail || "").toLowerCase().trim() === "glalavmlalav" ||
+                  (currentUserEmail || "").toLowerCase().trim() === "admin";
 
   const handleConfirmDelete = async () => {
     if (!userToDelete) return;
     const docIdToDel = userToDelete.id || userToDelete.username;
     
     if (!isOwner) {
-      alert(language === "ku" ? "تەنیا خاوەنی سەرەکی (Owner) دەسەڵاتی سڕینەوەی بەکارهێنەرانی هەیە!" : "Only the primary Owner has permission to delete users!");
+      alert(language === "ku" ? "تەنیا سوپەر ئەدمینی سەرەکی دەسەڵاتی سڕینەوەی بەکارهێنەرانی هەیە!" : "Only the primary super admin has permission to delete users!");
       setUserToDelete(null);
       return;
     }
     const cleanDocId = (docIdToDel || "").toLowerCase().trim();
-    if (cleanDocId === "glalavmlalav@gmail.com") {
-      alert(language === "ku" ? "ناتوانی ئەکاونتی خاوەنی سەرەکی بسڕیتەوە!" : "You cannot delete the primary owner account!");
+    if (cleanDocId === "glalavmlalav@gmail.com" || cleanDocId === "glalavmlalav" || cleanDocId === "admin") {
+      alert(language === "ku" ? "ناتوانی ئەکاونتی سوپەر ئەدمینی سەرەکی بسڕیتەوە!" : "You cannot delete the primary owner account!");
       setUserToDelete(null);
       return;
     }
@@ -150,19 +169,19 @@ export default function SettingsPanel({
   };
 
   return (
-    <div className="space-y-8" id="settings_panel_root">
+    <div className="space-y-8" id="settings_panel_root" dir={language === "ku" ? "rtl" : "ltr"}>
       {/* Header Info */}
       <div className="glass-panel rounded-[36px] p-6 md:p-8 shadow-sm relative overflow-hidden">
-        <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-teal-400 via-indigo-400 to-rose-400" />
+        <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-indigo-500 via-amber-400 to-emerald-400" />
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <span className="text-[10px] bg-indigo-500/10 text-indigo-700 font-black px-3 py-1.5 rounded-full border border-indigo-500/10 uppercase tracking-widest font-sans inline-flex items-center gap-1.5 mb-3">
-              <Shield className="w-3.5 h-3.5" /> Passwordless Security
+          <div className="text-right">
+            <span className="text-[10px] bg-indigo-500/10 text-indigo-700 font-extrabold px-3 py-1.5 rounded-full border border-indigo-500/10 uppercase tracking-wider inline-flex items-center gap-1.5 mb-3">
+              <Shield className="w-3.5 h-3.5" /> {language === "ku" ? "بەرێوەبردنی دەسەڵاتەکان بە پاسۆرد" : "Credential-Based Access Panel"}
             </span>
-            <h2 className="text-2xl md:text-3.5xl font-display font-black text-slate-800 tracking-tight leading-tight">
+            <h2 className="text-2xl md:text-3xl font-display font-black text-slate-800 tracking-tight leading-tight">
               {t.title}
             </h2>
-            <p className="text-slate-500 text-xs md:text-sm mt-1.5 max-w-2xl font-sans leading-relaxed">
+            <p className="text-slate-500 text-xs md:text-sm mt-1.5 max-w-2xl leading-relaxed">
               {t.desc}
             </p>
           </div>
@@ -179,11 +198,11 @@ export default function SettingsPanel({
 
       {/* Users List */}
       <div className="glass-panel rounded-[36px] p-6 md:p-8 shadow-sm">
-        <h3 className="text-lg font-display font-black text-slate-800 mb-6 flex items-center gap-3">
+        <h3 className="text-lg font-display font-black text-slate-800 mb-6 flex items-center gap-3 justify-start">
           <span className="p-2 bg-indigo-500/10 text-indigo-600 border border-indigo-500/10 rounded-2xl">
             <Users className="w-5 h-5" />
           </span>
-          {language === "ku" ? "ڕێگەپێدراوەکانی چوونەژوورەوە" : "Allowed System Accounts"}
+          <span>{language === "ku" ? "لیستی ئەکاونتە ڕێگەپێدراوەکان" : "Registered Administrator Logins"}</span>
         </h3>
 
         {appUsers.length === 0 ? (
@@ -199,16 +218,16 @@ export default function SettingsPanel({
                 ? (language === "ku" ? bInfo.nameKu : bInfo.nameEn)
                 : (user.business !== "all" ? user.business : t.assignedAll);
 
-              const displayEmail = user.email || user.username;
+              const isUserPasswordVisible = !!showPasswords[user.username];
 
               return (
                 <div 
                   key={user.id || user.username} 
-                  className="bg-white/85 p-5 rounded-3xl border border-slate-100 hover:border-slate-200 hover:shadow-md transition duration-200 relative overflow-hidden flex flex-col justify-between"
+                  className="bg-white/85 p-5 rounded-3xl border border-slate-100 hover:border-slate-200 hover:shadow-md transition duration-200 relative overflow-hidden flex flex-col justify-between text-right"
                 >
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className={`px-2.5 py-1 text-[9px] font-bold rounded-lg border uppercase ${
+                      <span className={`px-2.5 py-1 text-[9px] font-extrabold rounded-lg border uppercase ${
                         user.role === "super_admin"
                           ? "bg-rose-500/10 text-rose-600 border-rose-200"
                           : "bg-amber-500/10 text-amber-600 border-amber-200"
@@ -224,7 +243,7 @@ export default function SettingsPanel({
                         >
                           <Edit className="w-4 h-4" />
                         </button>
-                        {isOwner && (user.username || "").toLowerCase() !== "glalavmlalav@gmail.com" && (user.id || "").toLowerCase() !== "glalavmlalav@gmail.com" && (
+                        {isOwner && (user.username || "").toLowerCase() !== "glalavmlalav@gmail.com" && (user.username || "").toLowerCase() !== "glalavmlalav" && (user.username || "").toLowerCase() !== "admin" && (
                           <button
                             onClick={() => setUserToDelete(user)}
                             className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
@@ -238,9 +257,27 @@ export default function SettingsPanel({
 
                     <div>
                       <h4 className="font-extrabold text-slate-800 text-sm">{user.name}</h4>
-                      <p className="font-mono text-xs text-slate-400 mt-1 flex items-center gap-1">
-                        <Mail className="w-3.5 h-3.5 text-slate-400 inline" /> {displayEmail}
-                      </p>
+                      <div className="mt-2.5 space-y-1 bg-slate-50/50 p-2.5 rounded-xl border border-slate-100">
+                        <p className="font-mono text-xs text-slate-600 flex items-center justify-between">
+                          <span className="text-slate-400 uppercase tracking-wide text-[9px] font-sans font-bold">{language === "ku" ? "یوزەرنەیم:" : "Username:"}</span>
+                          <span className="font-black">{user.username}</span>
+                        </p>
+                        <p className="font-mono text-xs text-slate-600 flex items-center justify-between gap-2.5">
+                          <span className="text-slate-400 uppercase tracking-wide text-[9px] font-sans font-bold">{language === "ku" ? "تێپەڕەوشە:" : "Password:"}</span>
+                          <span className="flex items-center gap-1 font-sans">
+                            <span className="font-mono font-bold">
+                              {isUserPasswordVisible ? (user.password || "••••••••") : "••••••••"}
+                            </span>
+                            <button 
+                              type="button"
+                              onClick={() => togglePasswordVisibility(user.username)}
+                              className="text-slate-400 hover:text-slate-600"
+                            >
+                              {isUserPasswordVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                          </span>
+                        </p>
+                      </div>
                     </div>
 
                     <div className="space-y-2 text-[11px] text-slate-500 border-t border-slate-50 pt-3">
@@ -264,13 +301,15 @@ export default function SettingsPanel({
       {/* Add / Edit User Modal */}
       {showAddUserModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/45 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-white/95 backdrop-blur-xl rounded-[36px] max-w-md w-full border border-white shadow-2xl overflow-hidden animate-fade-in">
+          <div className="bg-white/95 backdrop-blur-xl rounded-[36px] max-w-md w-full border border-white shadow-2xl overflow-hidden animate-fade-in text-right">
             <div className="flex items-center justify-between bg-indigo-950 text-white p-6">
               <h3 className="font-display font-black text-lg flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-indigo-400" />
-                {editingUser 
-                  ? (language === "ku" ? "دەستکاریکردنی ئەکاونت" : "Edit Account Roles")
-                  : t.addUserBtn}
+                <span>
+                  {editingUser 
+                    ? (language === "ku" ? "دەستکاریکردنی یوزەر و تێپەڕەوشە" : "Edit Admin Account")
+                    : (language === "ku" ? "دروستکردنی ئەکاونتی نوێ" : t.addUserBtn)}
+                </span>
               </h3>
               <button 
                 onClick={handleCloseModal}
@@ -283,27 +322,51 @@ export default function SettingsPanel({
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">{t.fullName}</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Karwan Ali"
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 text-xs font-sans"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    placeholder={language === "ku" ? "بۆ نموونە: قاسم یان کاروان" : "e.g. Karwan Ali"}
+                    className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 text-xs font-sans text-right outline-none"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">{t.emailLabel}</label>
-                <input
-                  type="email"
-                  required
-                  disabled={!!editingUser}
-                  placeholder="e.g. karwan@gmail.com"
-                  className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 text-xs font-sans font-mono disabled:opacity-55"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                />
+                <label className="block text-xs font-bold text-slate-700 mb-1">{t.usernameLabel}</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400">
+                    <User className="w-3.5 h-3.5" />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    disabled={!!editingUser}
+                    placeholder="e.g. qasim or karwan"
+                    className="w-full py-2.5 pr-9 pl-3.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 text-xs font-sans font-mono text-left outline-none disabled:opacity-55"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">{t.passwordLabel}</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400">
+                    <Key className="w-3.5 h-3.5" />
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 123456 or someSecureWord"
+                    className="w-full py-2.5 pr-9 pl-3.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 text-xs font-sans font-mono text-left outline-none"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  />
+                </div>
               </div>
 
               <div>
@@ -376,8 +439,8 @@ export default function SettingsPanel({
               </h3>
               <p className="text-slate-500 text-xs md:text-sm leading-relaxed font-sans">
                 {language === "ku" 
-                  ? `ئایا دڵنیای لە سڕینەوەی ئەکاونتی "${userToDelete.name}" (${userToDelete.email || userToDelete.username})؟ ئەم کردارە ناگەڕێتەوە و دەستڕاگەیشتنی بە تەواوی دەبڕێت.`
-                  : `Are you sure you want to permanently delete user "${userToDelete.name}" (${userToDelete.email || userToDelete.username})? Their active permission sessions will be closed instantly.`}
+                  ? `ئایا دڵنیای لە سڕینەوەی ئەکاونتی "${userToDelete.name}" (${userToDelete.username})؟ ئەم کردارە ناگەڕێتەوە و دەستڕاگەیشتنی بە تەواوی دەبڕێت.`
+                  : `Are you sure you want to permanently delete user "${userToDelete.name}" (${userToDelete.username})? Their active permission sessions will be closed instantly.`}
               </p>
             </div>
 
