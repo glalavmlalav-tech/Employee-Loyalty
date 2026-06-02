@@ -43,6 +43,7 @@ import { Employee, LoyaltyActivity, GiftLog, AlertNotification, BusinessId, BUSI
 import { getActiveAlerts } from "./utils";
 
 // Sub-components
+import AppLogo from "./components/AppLogo";
 import AlertsPanel from "./components/AlertsPanel";
 import EmployeeDirectory from "./components/EmployeeDirectory";
 import SettingsPanel from "./components/SettingsPanel";
@@ -622,8 +623,8 @@ export default function App() {
   };
 
   const t = {
-    appName: language === "ku" ? "کۆنترۆڵی لۆیاڵیتی و دۆسیەی کارمەندان (سێ بزنس)" : "Employee Loyalty & Profiles Hub",
-    welcomeTitle: language === "ku" ? "سیستەمی بەڕێوەبردنی لۆیاڵیتی کارمەندەکان" : "Multi-Device Staff Loyalty Portals",
+    appName: language === "ku" ? "ستاف" : "Staff",
+    welcomeTitle: language === "ku" ? "ستاف - سیستەمی بەڕێوەبردنی لۆیاڵیتی کارمەندەکان" : "Staff - Multi-Device Loyalty Portals",
     welcomeDesc: language === "ku" ? "تایبەت بە لینیا، ماسیمۆ، و لیستۆن." : "Synchronized HR and Corporate Morale Hub for Linia, Massimo, and Liston businesses.",
     loginBtn: language === "ku" ? "چوونە ژوورەوە بە هەژماری کۆمپانیا (Google)" : "Sign in securely with Google",
     guestBtn: language === "ku" ? "چوونە ژوورەوەی خێرا (کۆنتڕۆڵ کەر)" : "Sandbox Direct Access (Guest Developer)",
@@ -732,8 +733,8 @@ export default function App() {
           </div>
 
           <div className="text-center mb-6">
-            <div className="w-16 h-16 rounded-2xl bg-white/60 backdrop-blur-md shadow-inner flex items-center justify-center mx-auto mb-4 border border-white/80">
-              <Lock className="w-9 h-9 text-rose-500 animate-pulse-slow" />
+            <div className="w-20 h-20 rounded-[28px] bg-white/60 backdrop-blur-md shadow-inner flex items-center justify-center mx-auto mb-4 border border-white/85">
+              <AppLogo className="w-14 h-14 animate-pulse-slow" color="#330a1c" />
             </div>
             <h2 className="text-2xl font-display font-black text-slate-800 leading-tight">
               {language === "ku" ? "داخڵبوونی ئەدمین و ستاف" : "Admin & Staff Portal"}
@@ -785,13 +786,18 @@ export default function App() {
         
         {/* Sidebar Header */}
         <div className="p-6 border-b border-white/10 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl md:text-2xl font-display font-black tracking-tight text-amber-400">
-              {language === "ku" ? "دۆسیەی کارمەندان" : "Staff Profiles Hub"}
-            </h1>
-            <p className="text-[10px] text-slate-400 mt-1 font-medium select-none">
-              {language === "ku" ? "سیستەمی دڵسۆزی کارمەندان" : "Corporate Staff Loyalty System"}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/5 flex-shrink-0">
+              <AppLogo className="w-9 h-9 animate-pulse-slow" color="#f59e0b" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-display font-black tracking-tight text-amber-400 leading-tight">
+                {language === "ku" ? "ستاف" : "Staff"}
+              </h1>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-medium select-none">
+                {language === "ku" ? "سیستەمی بەڕێوەبردن" : "Management Hub"}
+              </p>
+            </div>
           </div>
           {/* Close button for mobile */}
           <button 
