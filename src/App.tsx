@@ -329,7 +329,15 @@ export default function App() {
       }
     );
 
-    // 4. Snapshot for System User Credentials
+    return () => {
+      unsubscribeEmployees();
+      unsubscribeActivities();
+      unsubscribeGifts();
+    };
+  }, [currentUser, sandboxGuest, userSession]);
+
+  // Distinct unconditional hook to fetch System Admin Credentials (available on splash login screen)
+  useEffect(() => {
     const unsubscribeAppUsers = onSnapshot(
       collection(db, "app_users"),
       (snapshot) => {
@@ -368,17 +376,14 @@ export default function App() {
         }
       },
       (error) => {
-        console.error("Error fetching admin users from Firestore:", error);
+        console.error("Error fetching admin users from Firestore on startup:", error);
       }
     );
 
     return () => {
-      unsubscribeEmployees();
-      unsubscribeActivities();
-      unsubscribeGifts();
       unsubscribeAppUsers();
     };
-  }, [currentUser, sandboxGuest]);
+  }, []);
 
   // Recalculate alerts if employees update
   useEffect(() => {
