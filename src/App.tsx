@@ -645,23 +645,7 @@ export default function App() {
     if (isRestrictedBusiness && e.business !== restrictedBusinessId) {
       return false;
     }
-    // 2. Creator restriction: If standard admin, they must have added the employee themselves
-    if (!isSuperAdmin && userSession) {
-      const userEmail = (userSession.email || "").toLowerCase().trim();
-      const userUsername = (userSession.username || "").toLowerCase().trim();
-      const userId = (userSession.id || "").toLowerCase().trim();
-      
-      const createdByClean = (e.createdBy || "").toLowerCase().trim();
-      
-      const matchesCreator = 
-        createdByClean === userEmail || 
-        createdByClean === userUsername || 
-        createdByClean === userId;
-
-      if (!matchesCreator) {
-        return false;
-      }
-    }
+    // No Creator restriction: Any admin sees all employees in their business
     return true;
   });
 

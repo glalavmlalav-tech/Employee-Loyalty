@@ -136,6 +136,7 @@ export default function EmployeeDirectory({
   userSession
 }: EmployeeDirectoryProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const isSuperAdmin = userSession?.role === "super_admin";
   const [selectedBusinessFilter, setSelectedBusinessFilter] = useState<BusinessId | "all">(
     userSession && userSession.business !== "all" ? userSession.business : "all"
   );
@@ -832,8 +833,18 @@ export default function EmployeeDirectory({
                 </div>
 
                 <div className="mt-5 border-t border-slate-100 pt-4 flex flex-col gap-2">
-                  {/* Actions buttons */}
-                  <div className="flex gap-2 justify-end items-center">
+                  <div className="flex gap-2 justify-between items-center flex-wrap">
+                    <div>
+                      {isSuperAdmin && emp.createdBy && (
+                        <div className="text-[10px] text-slate-400 font-bold flex items-center gap-1 select-none">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                          <span>{language === "ku" ? "زیادکراوە لەلایەن: " : "Created by: "}</span>
+                          <span className="font-extrabold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded-md font-mono">{emp.createdBy}</span>
+                        </div>
+                      )}
+                    </div>
+                    {/* Actions buttons */}
+                    <div className="flex gap-2 justify-end items-center">
                     <button
                       onClick={() => handleOpenEdit(emp)}
                       className="transition active:scale-95"
@@ -861,6 +872,7 @@ export default function EmployeeDirectory({
                       </button>
                     )}
                   </div>
+                </div>
                 </div>
               </div>
             );
