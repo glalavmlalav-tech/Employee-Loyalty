@@ -100,27 +100,6 @@ export function getActiveAlerts(employees: Employee[], referenceDateStr: string 
         });
       }
     }
-
-    // Check Work Anniversary
-    if (emp.hireDate) {
-      const hireCalc = getDaysRemaining(emp.hireDate, referenceDateStr);
-      if (hireCalc && hireCalc.days >= 0 && hireCalc.days <= 2) {
-        const yearsAtCompany = currentYear - hireCalc.yearOfEvent;
-        if (yearsAtCompany > 0) {
-          alerts.push({
-            id: `hire-${emp.id}`,
-            employeeId: emp.id,
-            employeeName: emp.name,
-            business: emp.business,
-            type: "work_anniversary",
-            daysRemaining: hireCalc.days,
-            dateLabel: hireCalc.label,
-            actualDate: emp.hireDate,
-            yearsAtCompany
-          });
-        }
-      }
-    }
   });
   
   // Sort by soonest (daysRemaining ascending)

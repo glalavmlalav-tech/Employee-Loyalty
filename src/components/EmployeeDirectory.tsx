@@ -22,7 +22,8 @@ import {
   User,
   RefreshCw,
   Shield,
-  Clock
+  Clock,
+  Printer
 } from "lucide-react";
 import { Employee, BusinessId, BUSINESSES, MaritalStatus, EmployeeStatus } from "../types";
 import ImageCropper from "./ImageCropper";
@@ -438,6 +439,21 @@ export default function EmployeeDirectory({
     setShowExportModal(true);
   };
 
+  const handleExportPDF = () => {
+    if (selectedEmpIds.length === 0) {
+      alert(
+        language === "ku"
+          ? "تکایە سەرەتا کارمەندێک سکێلت بکە بە دیاریکردنی چوارگۆشەی تەنیشت ناوی کارمەندەکە پێش داگرتنی فایلی PDF."
+          : "Please select at least one employee by checking the box next to their name first."
+      );
+      return;
+    }
+    
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
+
   const performExportCSV = () => {
     // Determine target employees
     const employeesToExport = selectedEmpIds.length > 0
@@ -641,6 +657,22 @@ export default function EmployeeDirectory({
             </span>
           </button>
 
+          {isSuperAdmin && (
+            <button
+              onClick={handleExportPDF}
+              className="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md hover:scale-102 transition duration-200 cursor-pointer"
+              title={language === "ku" ? "داگرتنی دۆسیە بە فایلی PDF ڕوون" : "Export Selected Profiles as Beautiful Graphical PDF"}
+            >
+              <Printer className="w-4 h-4" />
+              <span>
+                {language === "ku"
+                  ? (selectedEmpIds.length > 0 ? `داگرتنی PDF (${selectedEmpIds.length})` : "داگرتنی PDF")
+                  : (selectedEmpIds.length > 0 ? `Export PDF (${selectedEmpIds.length})` : "Export PDF")
+                }
+              </span>
+            </button>
+          )}
+
           <button
             onClick={handleOpenAdd}
             className="px-4 py-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-950 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md hover:scale-102 transition duration-200 cursor-pointer"
@@ -699,12 +731,12 @@ export default function EmployeeDirectory({
                         <img 
                           src={emp.photoUrl} 
                           alt={emp.name} 
-                          className="w-11 h-11 rounded-full object-cover border-2 border-white shadow bg-slate-100 shrink-0" 
+                          className="w-16 h-16 rounded-full object-cover border-2 border-white shadow bg-slate-100 shrink-0" 
                           referrerPolicy="no-referrer"
                         />
                       ) : (
-                        <div className="w-11 h-11 rounded-full bg-slate-100/80 border border-slate-200/50 flex items-center justify-center shadow-inner text-slate-400 shrink-0">
-                          <User className="w-4 h-4" />
+                        <div className="w-16 h-16 rounded-full bg-slate-100/80 border border-slate-200/50 flex items-center justify-center shadow-inner text-slate-400 shrink-0">
+                          <User className="w-7 h-7" />
                         </div>
                       )}
                       <div>
@@ -933,11 +965,11 @@ export default function EmployeeDirectory({
                       <img 
                         src={formData.photoUrl} 
                         alt="Preview" 
-                        className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md bg-white text-xs text-slate-400" 
+                        className="w-28 h-28 rounded-full object-cover border-4 border-white shadow-md bg-white text-xs text-slate-400" 
                       />
                     ) : (
-                      <div className="w-20 h-20 rounded-full bg-slate-200 border-4 border-white flex items-center justify-center shadow-inner text-slate-400">
-                        <User className="w-8 h-8" />
+                      <div className="w-28 h-28 rounded-full bg-slate-200 border-4 border-white flex items-center justify-center shadow-inner text-slate-400">
+                        <User className="w-12 h-12" />
                       </div>
                     )}
                     {formData.photoUrl && !isReadOnly && (
@@ -1405,6 +1437,289 @@ export default function EmployeeDirectory({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 3. Gorgeous Printing Overlay for Selected Employees */}
+      {isSuperAdmin && (
+        <div id="print-section" className="hidden print:block w-full text-slate-800">
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              html, body {
+                background: white !important;
+                color: #1e293b !important;
+                font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
+              body * {
+                visibility: hidden !important;
+              }
+              #print-section, #print-section * {
+                visibility: visible !important;
+              }
+              #print-section {
+                display: block !important;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+              }
+              @page {
+                size: A4 portrait;
+                margin: 12mm 15mm;
+              }
+            }
+          `}} />
+          
+          {employees.filter((e) => selectedEmpIds.includes(e.id)).map((emp, index, arr) => {
+            const biz = BUSINESSES[emp.business];
+            const isMarried = emp.maritalStatus === "married";
+            
+            let themeHex = "#f59e0b"; // amber-500
+            let themeBg = "bg-amber-500/[0.04]";
+            let themeText = "text-amber-800";
+            let themeBorder = "border-amber-500/20";
+            
+            const empBiz = emp.business === "linia" ? "linia_karge" : emp.business;
+            if (empBiz.startsWith("linia")) {
+              themeHex = "#f59e0b";
+              themeBg = "bg-amber-500/[0.04]";
+              themeText = "text-amber-800";
+              themeBorder = "border-amber-500/20";
+            } else if (empBiz === "massimo") {
+              themeHex = "#6366f1";
+              themeBg = "bg-indigo-500/[0.04]";
+              themeText = "text-indigo-800";
+              themeBorder = "border-indigo-500/20";
+            } else if (empBiz === "liston") {
+              themeHex = "#10b981";
+              themeBg = "bg-emerald-500/[0.04]";
+              themeText = "text-emerald-800";
+              themeBorder = "border-emerald-500/20";
+            }
+
+            return (
+              <div 
+                key={emp.id} 
+                className="print-card min-h-[265mm] flex flex-col justify-between p-8 bg-white border border-slate-200 rounded-[36px] relative overflow-hidden mb-8"
+                style={{ 
+                  pageBreakAfter: index < arr.length - 1 ? "always" : "auto",
+                  WebkitPrintColorAdjust: "exact",
+                  printColorAdjust: "exact"
+                }}
+              >
+                {/* Decorative Visual Accents */}
+                <div className={`absolute top-0 right-0 w-64 h-64 rounded-full filter blur-3xl opacity-20 pointer-events-none ${themeBg}`} />
+                <div className="absolute top-0 left-0 w-full h-[6px]" style={{ backgroundColor: themeHex }} />
+
+                <div>
+                  {/* Top Header Branding Row */}
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-5 mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center">
+                        <Shield className="w-6 h-6 text-slate-800" />
+                      </div>
+                      <div className="text-left">
+                        <h2 className="text-xs font-black text-slate-900 tracking-wider uppercase font-sans">
+                          {language === "ku" ? "کۆمەڵەی لێنیا و هاوبەشەکانی" : "LENYA & AFFILIATES GROUP"}
+                        </h2>
+                        <span className="text-[9px] font-bold text-slate-400 font-sans tracking-wide">
+                          {language === "ku" ? "سیستەمی فەرمی ناوەندی سەرچاوە مرۆییەکان" : "Unified Corporate HR Management Dossier"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 font-sans">
+                        {language === "ku" ? "کۆدی دۆسیە" : "DOSSIER REF ID"}
+                      </div>
+                      <div className="text-xs font-black text-slate-800 font-sans tracking-wider">
+                        #HR-{emp.id.substring(0, 7).toUpperCase()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Main Title Banner */}
+                  <div className="text-center mb-6 relative">
+                    <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                      <div className="w-full border-t border-slate-100"></div>
+                    </div>
+                    <div className="relative flex justify-center">
+                      <span className="px-5 py-1.5 bg-slate-50 border border-slate-100 rounded-full text-[10px] font-black tracking-widest text-slate-500 font-display">
+                        {language === "ku" ? "دۆسیەی فەرمی زانیاری کارمەند" : "OFFICIAL EMPLOYEE DOSSIER"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Profile Layout Grid: Photo right */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-8 mb-6 items-center bg-slate-50/50 border border-slate-100 p-6 rounded-[28px]">
+                    <div className="col-span-4 flex justify-center">
+                      {emp.photoUrl ? (
+                        <div className="relative p-1 bg-white border border-slate-200 shadow-sm rounded-full">
+                          <img 
+                            src={emp.photoUrl} 
+                            alt={emp.name} 
+                            className="w-32 h-32 rounded-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-32 h-32 rounded-full bg-slate-100 flex items-center justify-center border border-dashed border-slate-300 text-slate-400">
+                          <User className="w-12 h-12" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="col-span-8 space-y-3 text-right md:text-left">
+                      <div>
+                        <h1 className="text-xl font-black text-slate-900 tracking-tight font-display mb-1">{emp.name}</h1>
+                        <p className="text-xs font-bold text-slate-500 font-sans uppercase tracking-wider">{emp.role}</p>
+                      </div>
+
+                      {/* Info badges */}
+                      <div className="flex flex-wrap items-center gap-2 justify-end md:justify-start">
+                        <span className={`text-[9px] font-black uppercase tracking-wider leading-none px-3 py-1 rounded-full border shadow-[0_1px_2px_rgba(0,0,0,0.02)] ${themeBg} ${themeText} ${themeBorder}`}>
+                          {biz ? (language === "ku" ? biz.nameKu : biz.nameEn) : emp.business}
+                        </span>
+                        <span className={`text-[9px] font-black uppercase tracking-wider leading-none px-3 py-1 rounded-full border shadow-[0_1px_2px_rgba(0,0,0,0.02)] bg-slate-100 text-slate-600 border-slate-200`}>
+                          {emp.status === "active" ? (language === "ku" ? "چالاک" : "Active") : emp.status === "suspended" ? (language === "ku" ? "ڕاگیراو" : "Suspended") : (language === "ku" ? "خانەنشین" : "Retired")}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 text-xs pt-2.5 border-t border-slate-100/80">
+                        <div>
+                          <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest mb-0.5">{language === "ku" ? "بزنس / پیشەی دیاریکراو" : "Focus Sector Branch"}</div>
+                          <div className="font-extrabold text-slate-700">{biz ? (language === "ku" ? biz.typeKu : biz.typeEn) : "-"}</div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest mb-0.5">{language === "ku" ? "ڕێکەوتی دامەزراندن" : "Onboarding Date"}</div>
+                          <div className="font-extrabold text-slate-700 font-sans">{emp.hireDate || "-"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Informational Blocks: Personal Details & Contact Details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Block A: General Personnel profile */}
+                    <div className="border border-slate-150 p-6 rounded-[28px] bg-white shadow-xs">
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+                        <Award className="w-4 h-4 text-amber-500" />
+                        {language === "ku" ? "زانیاری کەسیی سەرەکی" : "Core Personal Profile"}
+                      </h3>
+                      
+                      <div className="space-y-3 text-xs font-semibold">
+                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
+                          <span className="text-slate-400">{language === "ku" ? "ڕێکەوتی لەدایکبوون" : "Birth Date"}</span>
+                          <span className="text-slate-800 font-sans">{emp.birthDate || "-"}</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
+                          <span className="text-slate-400">{language === "ku" ? "بارودۆخی خێزانی" : "Marital Status"}</span>
+                          <span className="text-slate-800">
+                            {emp.maritalStatus === "married" ? (language === "ku" ? "هاوسەرگیریکردوو 💍" : "Married 💍") : (language === "ku" ? "سەڵت 👤" : "Single 👤")}
+                          </span>
+                        </div>
+
+                        {isMarried && emp.marriageAnniversary && (
+                          <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50 bg-amber-500/[0.03] px-2.5 rounded-lg border border-amber-500/10">
+                            <span className="text-amber-800 font-extrabold">{language === "ku" ? "ڕۆژی هاوسەرگیری" : "Marriage Anniversary"}</span>
+                            <span className="text-amber-900 font-sans font-bold">{emp.marriageAnniversary}</span>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
+                          <span className="text-slate-400">{language === "ku" ? "ڕەگەزنامە" : "Citizenship"}</span>
+                          <span className="text-slate-800">{emp.citizenship || "-"}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between py-1.5">
+                          <span className="text-slate-400">{language === "ku" ? "نەتەوە" : "Ethnicity"}</span>
+                          <span className="text-slate-800">{emp.ethnicity || "-"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Block B: Contact Detail Records */}
+                    <div className="border border-slate-150 p-6 rounded-[28px] bg-white shadow-xs">
+                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-emerald-500" />
+                        {language === "ku" ? "پەیوەندی و ناونیشان" : "Contact & Geography"}
+                      </h3>
+                      
+                      <div className="space-y-3 text-xs font-semibold">
+                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
+                          <span className="text-slate-400">{language === "ku" ? "ژمارەی مۆبایل" : "Phone Number"}</span>
+                          <span className="text-slate-800 font-sans tracking-wide">{emp.phone || "-"}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
+                          <span className="text-slate-400">{language === "ku" ? "کەسی نزیک (فریاکەوتن)" : "Emergency Contact"}</span>
+                          <span className="text-slate-800 font-sans">{emp.emergencyContactPhone || "-"}</span>
+                        </div>
+
+                        {emp.emergencyContactRelation && (
+                          <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
+                            <span className="text-slate-400">{language === "ku" ? "پەیوەندی کەسی نزیک" : "Emergency Relation"}</span>
+                            <span className="text-slate-800">{emp.emergencyContactRelation}</span>
+                          </div>
+                        )}
+
+                        <div className="flex items-start justify-between py-1.5">
+                          <span className="text-slate-400 shrink-0">{language === "ku" ? "ناونیشانی نیشتەجێبوون" : "Residence Address"}</span>
+                          <span className="text-slate-800 text-left md:text-right max-w-[180px] leading-tight font-medium bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+                            {emp.residenceAddress || "-"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer and Corporate Validation Elements */}
+                <div className="border-t border-slate-100 pt-6 mt-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                  {/* Digital Signature Security Row */}
+                  <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 p-2.5 rounded-2xl">
+                    <svg className="w-10 h-10 text-slate-700 shrink-0 border border-slate-200 p-1 bg-white rounded-lg" viewBox="0 0 100 100" fill="currentColor">
+                      <rect x="10" y="10" width="20" height="20" />
+                      <rect x="70" y="10" width="20" height="20" />
+                      <rect x="10" y="70" width="20" height="20" />
+                      <rect x="35" y="35" width="30" height="30" />
+                      <rect x="40" y="10" width="10" height="15" />
+                      <rect x="10" y="40" width="15" height="10" />
+                      <rect x="80" y="40" width="10" height="20" />
+                      <rect x="40" y="80" width="25" height="10" />
+                    </svg>
+                    <div className="text-[8px] font-bold text-slate-500 leading-snug font-sans max-w-[220px]">
+                      {language === "ku" ? (
+                        <>
+                          ئەم زانیارییە پارێزراوە لە ڕێگەی لۆگی ناوەندی.
+                          <br />
+                          <span className="text-slate-400">ڕێکەوتی چاپکردن: {new Date().toLocaleDateString('ku-IQ')} • بە فەرمی چالاکە</span>
+                        </>
+                      ) : (
+                        <>
+                          This record is generated securely from validated HR archives.
+                          <br />
+                          <span className="text-slate-400">Printed: {new Date().toLocaleDateString('en-US')} • Authentic Document</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Stamp space */}
+                  <div className="text-center md:text-right">
+                    <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                      {language === "ku" ? "بەشی سەرچاوە مرۆییەکان / مۆر و واژۆ" : "AUTHORIZED HR STAMP & SIGNATURE"}
+                    </div>
+                    <div className="inline-block w-36 border-b border-dashed border-slate-300 h-5"></div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

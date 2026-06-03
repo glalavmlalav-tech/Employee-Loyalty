@@ -164,33 +164,6 @@ export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, lang
         // ignore bad dates
       }
     }
-
-    // 3. Work Anniversary
-    if (emp.hireDate) {
-      try {
-        const parts = emp.hireDate.split("-");
-        if (parts.length === 3) {
-          const hireYear = parseInt(parts[0]);
-          const month = parseInt(parts[1]); // 1 to 12
-          const day = parseInt(parts[2]);
-          const yearsIn2026 = 2026 - hireYear;
-
-          if (yearsIn2026 > 0) {
-            allOccasions.push({
-              id: `hire-${emp.id}`,
-              employee: emp,
-              type: "work_anniversary",
-              originalDate: emp.hireDate,
-              day,
-              month,
-              yearsCount: yearsIn2026
-            });
-          }
-        }
-      } catch (err) {
-        // ignore bad dates
-      }
-    }
   });
 
   // Calculate event count per month (1-indexed keys)

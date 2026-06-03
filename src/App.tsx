@@ -1119,7 +1119,10 @@ export default function App() {
                   <div className="space-y-3">
                     {(Object.keys(BUSINESSES) as BusinessId[]).filter(id => id !== "linia").map((id) => {
                       const biz = BUSINESSES[id];
-                      const count = displayEmployees.filter((e) => e.business === id).length;
+                      const count = displayEmployees.filter((e) => {
+                        const empBiz = e.business === "linia" ? "linia_karge" : e.business;
+                        return empBiz === id;
+                      }).length;
                       const percentage = displayEmployees.length > 0 ? Math.round((count / displayEmployees.length) * 100) : 0;
                       return (
                         <div key={id} className="space-y-1">
