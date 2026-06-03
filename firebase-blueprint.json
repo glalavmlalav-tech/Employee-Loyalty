@@ -18,10 +18,9 @@
         "maritalStatus": { "type": "string", "enum": ["single", "married"] },
         "marriageAnniversary": { "type": "string", "format": "date", "description": "YYYY-MM-DD, optional if single" },
         "hireDate": { "type": "string", "format": "date", "description": "YYYY-MM-DD" },
-        "loyaltyPoints": { "type": "integer", "description": "Points reflecting their active contributions and loyalty metric" },
         "status": { "type": "string", "enum": ["active", "suspended", "retired"] }
       },
-      "required": ["id", "name", "business", "role", "birthDate", "maritalStatus", "hireDate", "loyaltyPoints", "status"]
+      "required": ["id", "name", "business", "role", "birthDate", "maritalStatus", "hireDate", "status"]
     },
     "LoyaltyActivity": {
       "title": "LoyaltyActivity",

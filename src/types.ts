@@ -97,7 +97,6 @@ export interface Employee {
   maritalStatus: MaritalStatus;
   marriageAnniversary?: string; // YYYY-MM-DD (optional)
   hireDate: string; // YYYY-MM-DD
-  loyaltyPoints: number; // For performance stars & loyalty activities
   status: EmployeeStatus;
   photoUrl?: string; // placeholder support
   emergencyContactPhone?: string; // ژمارەی کەسی نزیک لە کاتی پێویست
@@ -144,9 +143,9 @@ export interface GiftLog {
   employeeId: string;
   employeeName: string;
   employeeBusiness: BusinessId;
-  occasionType: "birthday" | "marriage_anniversary";
+  occasionType: "birthday" | "marriage_anniversary" | "work_anniversary";
   occasionDate: string; // MM-DD
-  actualDate: string; // Description or YYYY-MM-DD representing birth/marriage
+  actualDate: string; // Description or YYYY-MM-DD representing birth/marriage/hire
   giftIdea: string;
   status: "pending" | "prepared" | "delivered" | "cancelled";
   updatedAt: string; // ISO String
@@ -157,18 +156,19 @@ export interface AlertNotification {
   employeeId: string;
   employeeName: string;
   business: BusinessId;
-  type: "birthday" | "marriage_anniversary";
+  type: "birthday" | "marriage_anniversary" | "work_anniversary";
   daysRemaining: number; // 2, 1, or 0
   dateLabel: string; // formatted Kurdish / English date
   actualDate: string; // standard value
   marriedYears?: number; // calculated if anniversary
   age?: number; // calculated if birthday
+  yearsAtCompany?: number; // calculated if work anniversary
 }
 
 export interface WhatsAppTemplate {
   id: string;
   title: string; // human readable name
   message: string; // message text containing placeholders like {name} or {type} or {business}
-  type: "birthday" | "marriage_anniversary" | "general";
+  type: "birthday" | "marriage_anniversary" | "work_anniversary" | "general";
   isDefault?: boolean;
 }

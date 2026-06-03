@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { AlertNotification, GiftLog, Employee, BusinessId, BUSINESSES } from "../types";
 
-const getWhatsAppLink = (phone: string, name: string, type: "birthday" | "marriage_anniversary", language: "ku" | "en") => {
+const getWhatsAppLink = (phone: string, name: string, type: "birthday" | "marriage_anniversary" | "work_anniversary", language: "ku" | "en") => {
   if (!phone) return "";
   let cleanedPhone = phone.replace(/[^0-9+]/g, ""); // remove dashes, spaces, etc.
   if (cleanedPhone.startsWith("0")) {
@@ -31,10 +31,14 @@ const getWhatsAppLink = (phone: string, name: string, type: "birthday" | "marria
     message = language === "ku"
       ? `سڵاو بەڕێز ${name}، ڕۆژی لەدایکبوونت پیرۆز بێت! بەناوی کۆمپانیاوە هیوای تەمەندرێژی و هەمیشە سەرکەوتنت بۆ دەخوازین. 🎂🎉`
       : `Hello Dear ${name}, Happy Birthday! Corporate greetings on your special day. Wishing you a long life and endless success! 🎂🎉`;
-  } else {
+  } else if (type === "marriage_anniversary") {
     message = language === "ku"
       ? `سڵاو بەڕێز ${name}، ساڵیادی هاوسەرگیریتان پیرۆز بێت! بەناوی کۆمپانیاوە هیوای بەختەوەری و چرکە بە چرکە خۆشبەختیتان بۆ دەخوازین. 💍✨`
       : `Hello Dear ${name}, Happy Wedding Anniversary! Corporate congratulations on your marriage milestone. Wishing you a life of happiness together! 💍✨`;
+  } else {
+    message = language === "ku"
+      ? `سڵاو هێژا بەڕێز ${name}، ساڵیادی دامەزراندنت لە کۆمپانیا پیرۆز بێت! سوپاسگوزاری ستاف و دڵسۆزیتین بۆ تەواوی کارە ناوازەکانت لەم ساڵانەدا. 🏆✨`
+      : `Hello Dear ${name}, Happy Work Anniversary! We are deeply grateful for your loyalty, dedication, and wonderful contributions over these years. 🏆✨`;
   }
   
   return `https://api.whatsapp.com/send?phone=${cleanedPhone}&text=${encodeURIComponent(message)}`;
@@ -46,7 +50,7 @@ interface AlertsPanelProps {
   employees: Employee[];
   onUpdateGiftStatus: (giftId: string, status: GiftLog["status"]) => Promise<void>;
   onAddGiftIdea: (giftData: Omit<GiftLog, "id" | "updatedAt">) => Promise<void>;
-  onTriggerWhatsApp: (employee: Employee, eventType: "birthday" | "marriage_anniversary") => void;
+  onTriggerWhatsApp: (employee: Employee, eventType: "birthday" | "marriage_anniversary" | "work_anniversary") => void;
   language: "ku" | "en";
 }
 
@@ -126,7 +130,7 @@ export default function AlertsPanel({
                   <td>${idx + 1}</td>
                   <td><strong>${al.employeeName}</strong></td>
                   <td>${getBusinessLabel(al.business)}</td>
-                  <td>${al.type === "birthday" ? (isKu ? "رۆژی لەدایکبوون 🎂" : "Birthday 🎂") : (isKu ? "ساڵیادی هاوسەرگیری 💍" : "Wedding Anniversary 💍")}</td>
+                  <td>${al.type === "birthday" ? (isKu ? "رۆژی لەدایکبوون 🎂" : "Birthday 🎂") : al.type === "marriage_anniversary" ? (isKu ? "ساڵیادی هاوسەرگیری 💍" : "Wedding Anniversary 💍") : (isKu ? "ساڵیادی دامەزراندن 🏆" : "Work Anniversary 🏆")}</td>
                   <td><span class="date">${al.actualDate}</span></td>
                   <td><strong>${al.daysRemaining === 0 ? (isKu ? "ئەمڕۆ!" : "Today!") : al.daysRemaining === 1 ? (isKu ? "سبەی!" : "Tomorrow!") : (isKu ? `${al.daysRemaining} ڕۆژ` : `${al.daysRemaining} days`)}</strong></td>
                 </tr>
@@ -153,6 +157,7 @@ export default function AlertsPanel({
     noAlerts: language === "ku" ? "هیچ بۆنەیەکی نزیک نییە لە دوو رۆژی داهاتوودا." : "No upcoming employee birthdays or anniversaries in the next 2 days.",
     birthday: language === "ku" ? "رۆژی لەدایکبوون" : "Birthday",
     anniversary: language === "ku" ? "ساڵیادی هاوسەرگیری" : "Wedding Anniversary",
+    workAnniversary: language === "ku" ? "ساڵیادی دامەزراندن" : "Work Anniversary",
     today: language === "ku" ? "ئەمڕۆ!" : "Today!",
     tomorrow: language === "ku" ? "سبەی!" : "Tomorrow!",
     daysRemainingKu: (n: number) => n === 2 ? "٢ رۆژی ماوە" : `${n} رۆژ ماوە`,
@@ -177,6 +182,8 @@ export default function AlertsPanel({
     ageLabelEn: (age: number) => `Age: ${age} years old`,
     marriedYearsKu: (years: number) => `${years}ەمین ساڵیادی هاوسەرگیری`,
     marriedYearsEn: (years: number) => `${years}th Wedding Anniversary`,
+    workYearsKu: (years: number) => `${years}ەمین ساڵیادی کارکردن/دامەزراندن`,
+    workYearsEn: (years: number) => `${years}th Work Anniversary milestone`,
     addCustomGiftTitle: language === "ku" ? "تۆمارکردنی دیارییەکی نوێ" : "Log New Gift Idea",
     enterIdea: language === "ku" ? "بیرۆکەی دیاریەکە یان بودجەکەی بنووسە..." : "Enter gift description or budget details...",
     loading: language === "ku" ? "چاوەڕوان بە..." : "Working..."
@@ -298,7 +305,11 @@ export default function AlertsPanel({
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {alerts.map((alert) => {
-              const bgBadgeColor = alert.type === "birthday" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-purple-50 text-purple-700 border-purple-200";
+              const bgBadgeColor = alert.type === "birthday" 
+                ? "bg-amber-50 text-amber-700 border-amber-200" 
+                : alert.type === "marriage_anniversary" 
+                  ? "bg-purple-50 text-purple-700 border-purple-200" 
+                  : "bg-teal-50 text-teal-700 border-teal-200";
               const isUrgent = alert.daysRemaining === 0;
               const daysColor = isUrgent 
                 ? "bg-rose-500 text-white" 
@@ -334,7 +345,7 @@ export default function AlertsPanel({
 
                     <h4 className="text-base font-extrabold text-slate-800 font-display">{alert.employeeName}</h4>
                     <p className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-lg border inline-block mt-2 font-medium ${bgBadgeColor}`}>
-                      {alert.type === "birthday" ? t.birthday : t.anniversary}
+                      {alert.type === "birthday" ? t.birthday : alert.type === "marriage_anniversary" ? t.anniversary : t.workAnniversary}
                     </p>
 
                     <div className="my-3 space-y-1.5 text-xs text-slate-600 font-sans">
@@ -347,7 +358,9 @@ export default function AlertsPanel({
                         <span className="font-bold text-slate-700 text-sm">
                           {alert.type === "birthday" 
                             ? (language === "ku" ? t.ageLabelKu(alert.age || 0) : t.ageLabelEn(alert.age || 0))
-                            : (language === "ku" ? t.marriedYearsKu(alert.marriedYears || 0) : t.marriedYearsEn(alert.marriedYears || 0))}
+                            : alert.type === "marriage_anniversary"
+                              ? (language === "ku" ? t.marriedYearsKu(alert.marriedYears || 0) : t.marriedYearsEn(alert.marriedYears || 0))
+                              : (language === "ku" ? t.workYearsKu(alert.yearsAtCompany || 0) : t.workYearsEn(alert.yearsAtCompany || 0))}
                         </span>
                       </div>
                     </div>
@@ -387,7 +400,9 @@ export default function AlertsPanel({
                             // Suggest a default gift based on type
                             setNewGiftIdea(alert.type === "birthday" 
                               ? (language === "ku" ? "کارتێکی پیرۆزبایی کۆمپانیا + کتێبێکی ناوازە یان کاتژمێر" : "Company birthday card + Premium branded watch or book")
-                              : (language === "ku" ? "کەبۆنەیەکی شیرینی خێزانی یان باوچەر بۆ دوو پیتزا گەرمە" : "Kurdish sweet box + Dinner voucher for two")
+                              : alert.type === "marriage_anniversary"
+                                ? (language === "ku" ? "کەبۆنەیەکی شیرینی خێزانی یان باوچەر بۆ دوو پیتزا گەرمە" : "Kurdish sweet box + Dinner voucher for two")
+                                : (language === "ku" ? "کارتێکی ڕێزلێنانی تایبەت بە ساڵیادی دامەزراندن + پاداشتی دارایی شایستە" : "Custom Work Anniversary Honor Card + Career milestone loyalty cash bonus")
                             );
                           }}
                           className="flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold glass-btn-primary shadow-sm whitespace-nowrap cursor-pointer"

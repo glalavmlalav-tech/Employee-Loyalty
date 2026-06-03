@@ -1,6 +1,6 @@
 {
   "name": "Employee Loyalty & Profiles Hub",
-  "description": "An employee portfolio controller and loyalty engagement planner for woodworking and marble/stone factories with milestone warnings and AI-powered recommendations synced to Firebase.",
+  "description": "An employee portfolio controller and seasonal engagement planner for woodworking and marble/stone factories with milestone warnings and AI-powered recommendations synced to Firebase.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

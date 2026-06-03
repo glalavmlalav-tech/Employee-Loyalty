@@ -139,22 +139,30 @@ export default function SettingsPanel({
     }
   };
 
-  const isOwner = (currentUserEmail || "").toLowerCase().trim() === "glalavmlalav@gmail.com" ||
-                  (currentUserEmail || "").toLowerCase().trim() === "glalavmlalav" ||
-                  (currentUserEmail || "").toLowerCase().trim() === "admin";
+  const isSuperAdmin = appUsers.some(
+    u => ((u.username || "").toLowerCase() === (currentUserEmail || "").toLowerCase().trim() ||
+          (u.email || "").toLowerCase() === (currentUserEmail || "").toLowerCase().trim()) &&
+         u.role === "super_admin"
+  ) || (currentUserEmail || "").toLowerCase().trim() === "glalavmlalav@gmail.com" ||
+       (currentUserEmail || "").toLowerCase().trim() === "glalavmlalav" ||
+       (currentUserEmail || "").toLowerCase().trim() === "admin";
 
   const handleConfirmDelete = async () => {
     if (!userToDelete) return;
     const docIdToDel = userToDelete.id || userToDelete.username;
     
-    if (!isOwner) {
-      alert(language === "ku" ? "تەنیا سوپەر ئەدمینی سەرەکی دەسەڵاتی سڕینەوەی بەکارهێنەرانی هەیە!" : "Only the primary super admin has permission to delete users!");
+    if (!isSuperAdmin) {
+      alert(language === "ku" ? "تەنیا سوپەر ئەدمین دەسەڵاتی سڕینەوەی بەکارهێنەرانی هەیە!" : "Only super admins have permission to delete users!");
       setUserToDelete(null);
       return;
     }
     const cleanDocId = (docIdToDel || "").toLowerCase().trim();
-    if (cleanDocId === "glalavmlalav@gmail.com" || cleanDocId === "glalavmlalav" || cleanDocId === "admin") {
-      alert(language === "ku" ? "ناتوانی ئەکاونتی سوپەر ئەدمینی سەرەکی بسڕیتەوە!" : "You cannot delete the primary owner account!");
+    const cleanUsername = (userToDelete.username || "").toLowerCase().trim();
+    const cleanEmail = (userToDelete.email || "").toLowerCase().trim();
+    const cleanCurrent = (currentUserEmail || "").toLowerCase().trim();
+
+    if (cleanDocId === cleanCurrent || cleanUsername === cleanCurrent || cleanEmail === cleanCurrent) {
+      alert(language === "ku" ? "ناتوانی ئەکاونتە چالاکەکەی خۆت بسڕیتەوە!" : "You cannot delete your own active account!");
       setUserToDelete(null);
       return;
     }
@@ -243,7 +251,10 @@ export default function SettingsPanel({
                         >
                           <Edit className="w-4 h-4" />
                         </button>
-                        {isOwner && (user.username || "").toLowerCase() !== "glalavmlalav@gmail.com" && (user.username || "").toLowerCase() !== "glalavmlalav" && (user.username || "").toLowerCase() !== "admin" && (
+                        {isSuperAdmin && 
+                         (user.username || "").toLowerCase().trim() !== (currentUserEmail || "").toLowerCase().trim() && 
+                         (user.email || "").toLowerCase().trim() !== (currentUserEmail || "").toLowerCase().trim() && 
+                         (user.id || "").toLowerCase().trim() !== (currentUserEmail || "").toLowerCase().trim() && (
                           <button
                             onClick={() => setUserToDelete(user)}
                             className="p-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"

@@ -17,7 +17,7 @@ interface WhatsAppComposerModalProps {
   isOpen: boolean;
   onClose: () => void;
   employee: Employee;
-  eventType: "birthday" | "marriage_anniversary";
+  eventType: "birthday" | "marriage_anniversary" | "work_anniversary";
   language: "ku" | "en";
 }
 
@@ -63,6 +63,20 @@ const DEFAULT_TEMPLATES: WhatsAppTemplate[] = [
     message: "کارمەندی هێژا و خۆشەویست {name}، ساڵڕۆژی هاوسەرگیریتان پیرۆزبێت. هیوادارین ژیانی هاوسەریتان چرکە بە چرکە ئارام، ئاسوودە و پڕ بەرەکەت بێت. 🥂💖",
     type: "marriage_anniversary",
     isDefault: true
+  },
+  {
+    id: "default-work-ku",
+    title: "دامەزراندن - فەرمی (کوردی)",
+    message: "سڵاو هێژا بەڕێز {name}، ساڵیادی دامەزراندنت لە کۆمپانیا پیرۆز بێت! سوپاسگوزاری ستاف و دڵسۆزیتین بۆ تەواوی کارە ناوازەکانت لەم ساڵانەدا. 🏆✨",
+    type: "work_anniversary",
+    isDefault: true
+  },
+  {
+    id: "default-work-en",
+    title: "Work Anniversary - Corporate (English)",
+    message: "Hello Dear {name}, Happy Work Anniversary! We are deeply grateful for your loyalty, dedication, and wonderful contributions over these years. 🏆✨",
+    type: "work_anniversary",
+    isDefault: true
   }
 ];
 
@@ -83,7 +97,7 @@ export default function WhatsAppComposerModal({
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState<string>("");
   const [newMessage, setNewMessage] = useState<string>("");
-  const [newType, setNewType] = useState<"birthday" | "marriage_anniversary" | "general">("general");
+  const [newType, setNewType] = useState<"birthday" | "marriage_anniversary" | "work_anniversary" | "general">("general");
 
   const t = {
     title: language === "ku" ? "نامە نێری واتسئەپ و نووسینەوە" : "WhatsApp Composer & Greetings",
@@ -109,6 +123,7 @@ export default function WhatsAppComposerModal({
     copied: language === "ku" ? "کۆپی کرا" : "Copied Text",
     birthday: language === "ku" ? "ڕۆژی لەدایکبوون" : "Birthday",
     anniversary: language === "ku" ? "ساڵیادی هاوسەرگیری" : "Wedding Anniversary",
+    workAnniversary: language === "ku" ? "ساڵیادی دامەزراندن" : "Work Anniversary",
     cancel: language === "ku" ? "پاشگەزبوونەوە" : "Cancel",
     update: language === "ku" ? "نوێکردنەوە" : "Update"
   };
@@ -419,6 +434,7 @@ export default function WhatsAppComposerModal({
                     >
                       <option value="birthday">{t.birthday}</option>
                       <option value="marriage_anniversary">{t.anniversary}</option>
+                      <option value="work_anniversary">{t.workAnniversary}</option>
                       <option value="general">گشتی / General</option>
                     </select>
                   </div>
@@ -479,9 +495,18 @@ export default function WhatsAppComposerModal({
                               ? "bg-amber-500/15 border-amber-500/10 text-amber-800" 
                               : temp.type === "marriage_anniversary"
                               ? "bg-purple-500/15 border-purple-500/10 text-purple-800"
+                              : temp.type === "work_anniversary"
+                              ? "bg-teal-500/15 border-teal-500/10 text-teal-800"
                               : "bg-slate-100 border-slate-250 text-slate-600"
                           }`}>
-                            {temp.type === "birthday" ? t.birthday : temp.type === "marriage_anniversary" ? t.anniversary : "گشتی"}
+                            {temp.type === "birthday" 
+                              ? t.birthday 
+                              : temp.type === "marriage_anniversary" 
+                              ? t.anniversary 
+                              : temp.type === "work_anniversary"
+                              ? t.workAnniversary
+                              : "گشتی"
+                            }
                           </span>
                           {temp.isDefault && (
                             <span className="bg-slate-50 border border-slate-200/60 text-slate-400 text-[8px] px-1 py-0.5 rounded-md font-sans">

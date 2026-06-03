@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Employee, BusinessId, BUSINESSES } from "../types";
 
-const getWhatsAppLink = (phone: string, name: string, type: "birthday" | "marriage_anniversary", language: "ku" | "en") => {
+const getWhatsAppLink = (phone: string, name: string, type: "birthday" | "marriage_anniversary" | "work_anniversary", language: "ku" | "en") => {
   if (!phone) return "";
   let cleanedPhone = phone.replace(/[^0-9+]/g, ""); // remove dashes, spaces, etc.
   if (cleanedPhone.startsWith("0")) {
@@ -27,10 +27,14 @@ const getWhatsAppLink = (phone: string, name: string, type: "birthday" | "marria
     message = language === "ku"
       ? `سڵاو بەڕێز ${name}، ڕۆژی لەدایکبوونت پیرۆز بێت! بەناوی کۆمپانیاوە هیوای تەمەندرێژی و هەمیشە سەرکەوتنت بۆ دەخوازین. 🎂🎉`
       : `Hello Dear ${name}, Happy Birthday! Corporate greetings on your special day. Wishing you a long life and endless success! 🎂🎉`;
-  } else {
+  } else if (type === "marriage_anniversary") {
     message = language === "ku"
       ? `سڵاو بەڕێز ${name}، ساڵیادی هاوسەرگیریتان پیرۆز بێت! بەناوی کۆمپانیاوە هیوای بەختەوەری و چرکە بە چرکە خۆشبەختیتان بۆ دەخوازین. 💍✨`
       : `Hello Dear ${name}, Happy Wedding Anniversary! Corporate congratulations on your marriage milestone. Wishing you a life of happiness together! 💍✨`;
+  } else {
+    message = language === "ku"
+      ? `سڵاو هێژا بەڕێز ${name}، ساڵیادی دامەزراندنت لە کۆمپانیا پیرۆز بێت! سوپاسگوزاری ستاف و دڵسۆزیتین بۆ تەواوی کارە ناوازەکانت لەم ساڵانەدا. 🏆✨`
+      : `Hello Dear ${name}, Happy Work Anniversary! We are deeply grateful for your loyalty, dedication, and wonderful contributions over these years. 🏆✨`;
   }
   
   return `https://api.whatsapp.com/send?phone=${cleanedPhone}&text=${encodeURIComponent(message)}`;
@@ -38,7 +42,7 @@ const getWhatsAppLink = (phone: string, name: string, type: "birthday" | "marria
 
 interface MonthlyCelebrationsProps {
   employees: Employee[];
-  onTriggerWhatsApp: (employee: Employee, eventType: "birthday" | "marriage_anniversary") => void;
+  onTriggerWhatsApp: (employee: Employee, eventType: "birthday" | "marriage_anniversary" | "work_anniversary") => void;
   language: "ku" | "en";
 }
 
@@ -64,8 +68,10 @@ export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, lang
     eventStatus: language === "ku" ? "جۆری بۆنە" : "Occasion",
     eventsInMonth: language === "ku" ? "بۆنەکانی مانگی" : "Occasions in",
     pointsBonus: language === "ku" ? "خاڵی مۆڕاڵی هاپێچ" : "Morale Points Allocated",
-    ageText: language === "ku" ? "ساڵان" : "years old",
-    annivYearsText: language === "ku" ? "ساڵ هاوسەرگیری" : "years married"
+    ageText: language === "ku" ? "ساڵان (تەمەن)" : "years old",
+    annivYearsText: language === "ku" ? "ساڵ هاوسەرگیری" : "years married",
+    workYearsText: language === "ku" ? "ساڵ لە کۆمپانیا" : "years at company",
+    workAnniversary: language === "ku" ? "ساڵیادی دامەزراندن" : "Work Anniversary"
   };
 
   const monthsKu = [
@@ -98,11 +104,11 @@ export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, lang
   interface OccasionItem {
     id: string;
     employee: Employee;
-    type: "birthday" | "marriage_anniversary";
+    type: "birthday" | "marriage_anniversary" | "work_anniversary";
     originalDate: string; // YYYY-MM-DD
     day: number;
     month: number; // 1-indexed
-    yearsCount: number; // calculated age or married years for reference in 2026
+    yearsCount: number; // calculated age/marriage/hire years for reference in 2026
   }
 
   // Parse all occasions
@@ -158,6 +164,33 @@ export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, lang
         // ignore bad dates
       }
     }
+
+    // 3. Work Anniversary
+    if (emp.hireDate) {
+      try {
+        const parts = emp.hireDate.split("-");
+        if (parts.length === 3) {
+          const hireYear = parseInt(parts[0]);
+          const month = parseInt(parts[1]); // 1 to 12
+          const day = parseInt(parts[2]);
+          const yearsIn2026 = 2026 - hireYear;
+
+          if (yearsIn2026 > 0) {
+            allOccasions.push({
+              id: `hire-${emp.id}`,
+              employee: emp,
+              type: "work_anniversary",
+              originalDate: emp.hireDate,
+              day,
+              month,
+              yearsCount: yearsIn2026
+            });
+          }
+        }
+      } catch (err) {
+        // ignore bad dates
+      }
+    }
   });
 
   // Calculate event count per month (1-indexed keys)
@@ -194,7 +227,9 @@ export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, lang
         : occ.employee.business;
       const occasionText = occ.type === "birthday"
         ? (language === "ku" ? "ڕۆژی لەدایکبوون" : "Birthday")
-        : (language === "ku" ? "ساڵیادی هاوسەرگیری" : "Wedding Anniversary");
+        : occ.type === "marriage_anniversary"
+          ? (language === "ku" ? "ساڵیادی هاوسەرگیری" : "Wedding Anniversary")
+          : (language === "ku" ? "ساڵیادی دامەزراندن" : "Work Anniversary");
 
       return [
         occ.day,
@@ -382,7 +417,7 @@ export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, lang
                 </div>
                 <div className="space-y-1">
                   <h5 className="text-sm font-bold text-slate-700">{t.noEvents}</h5>
-                  <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                  <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed animate-pulse">
                     {t.noEventsDesc}
                   </p>
                 </div>
@@ -402,21 +437,28 @@ export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, lang
                       className="group bg-white/40 backdrop-blur-sm p-4 rounded-[22px] border border-white/60 shadow-sm hover:ring-1 hover:ring-amber-500/20 hover:border-white transition-all duration-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
                       id={`celebration_row_${occ.id}`}
                     >
-                      <div className="flex items-center gap-3.5">
+                      <div className="flex items-center gap-3.5 pb-2 sm:pb-0">
                         {/* Event type specific graphic icon bubble */}
                         <div className={`p-3 rounded-2xl flex-shrink-0 shadow-sm ${
                           occ.type === "birthday" 
                             ? "bg-rose-500/10 text-rose-500 border border-rose-500/10" 
-                            : "bg-indigo-500/10 text-indigo-500 border border-indigo-500/10"
+                            : occ.type === "marriage_anniversary"
+                              ? "bg-indigo-500/10 text-indigo-500 border border-indigo-500/10"
+                              : "bg-teal-500/10 text-teal-500 border border-teal-500/10"
                         }`}>
-                          {occ.type === "birthday" ? <Cake className="w-5 h-5 animate-pulse-slow" /> : <Heart className="w-5 h-5 animate-pulse-slow" />}
+                          {occ.type === "birthday" 
+                            ? <Cake className="w-5 h-5 animate-pulse-slow" /> 
+                            : occ.type === "marriage_anniversary" 
+                              ? <Heart className="w-5 h-5 animate-pulse-slow" /> 
+                              : <Award className="w-5 h-5 animate-pulse-slow" />
+                          }
                         </div>
 
                         <div>
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="text-sm font-bold text-slate-800">{occ.employee.name}</span>
                             <span className="text-[10px] bg-white/60 text-slate-500 px-2 py-0.5 rounded-lg border border-white/80 font-mono font-bold">
-                              {occ.yearsCount} {occ.type === "birthday" ? t.ageText : t.annivYearsText}
+                              {occ.yearsCount} {occ.type === "birthday" ? t.ageText : occ.type === "marriage_anniversary" ? t.annivYearsText : t.workYearsText}
                             </span>
                           </div>
                           
@@ -425,14 +467,14 @@ export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, lang
                             <span className={`text-[9px] uppercase tracking-wider leading-none font-bold px-2 py-1 rounded-lg border shadow-[0_2px_4px_rgba(0,0,0,0.02)] ${getBusinessColor(occ.employee.business)}`}>
                               {biz ? (language === "ku" ? biz.nameKu : biz.nameEn) : occ.employee.business}
                             </span>
-                            <span className="text-xs text-slate-400 font-semibold">
+                            <span className="text-xs text-slate-400 font-semibold font-sans">
                               • {occ.employee.role}
                             </span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Right: Date block and quick celebratory info badge */}
+                      {/* Right: Date block and quick WhatsApp button */}
                       <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 pt-3 sm:pt-0 border-white/40">
                         <div className="text-right flex flex-col">
                           <span className="text-xs font-bold text-slate-800 bg-white/60 px-3 py-1.5 rounded-xl border border-white/80 shadow-sm font-mono whitespace-nowrap">

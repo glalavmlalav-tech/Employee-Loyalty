@@ -63,7 +63,6 @@ const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
     maritalStatus: "married" as const,
     marriageAnniversary: "2012-04-10",
     hireDate: "2018-03-01",
-    loyaltyPoints: 350,
     status: "active" as const
   },
   {
@@ -76,7 +75,6 @@ const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
     maritalStatus: "married" as const,
     marriageAnniversary: "2020-05-26", // Occurs in 1 day from May 25! (Alert Anniversary)
     hireDate: "2021-06-15",
-    loyaltyPoints: 520,
     status: "active" as const
   },
   {
@@ -88,7 +86,6 @@ const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
     birthDate: "1982-08-11",
     maritalStatus: "single" as const,
     hireDate: "2019-10-10",
-    loyaltyPoints: 280,
     status: "active" as const
   },
   {
@@ -101,7 +98,6 @@ const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
     maritalStatus: "married" as const,
     marriageAnniversary: "2017-09-12",
     hireDate: "2023-01-10",
-    loyaltyPoints: 150,
     status: "active" as const
   },
   {
@@ -113,7 +109,6 @@ const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
     birthDate: "1996-03-20",
     maritalStatus: "single" as const,
     hireDate: "2024-02-15",
-    loyaltyPoints: 120,
     status: "active" as const
   },
   {
@@ -125,7 +120,6 @@ const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
     birthDate: "1988-12-05",
     maritalStatus: "single" as const,
     hireDate: "2020-11-15",
-    loyaltyPoints: 390,
     status: "active" as const
   },
   {
@@ -138,7 +132,6 @@ const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
     maritalStatus: "married" as const,
     marriageAnniversary: "2010-05-27", // 2 Days from now (Alert anniversary!)
     hireDate: "2017-04-01",
-    loyaltyPoints: 600,
     status: "active" as const
   }
 ];
@@ -183,10 +176,10 @@ export default function App() {
   const [whatsappComposer, setWhatsappComposer] = useState<{
     isOpen: boolean;
     employee: Employee;
-    eventType: "birthday" | "marriage_anniversary";
+    eventType: "birthday" | "marriage_anniversary" | "work_anniversary";
   } | null>(null);
 
-  const triggerWhatsAppComposer = useCallback((employee: Employee, eventType: "birthday" | "marriage_anniversary") => {
+  const triggerWhatsAppComposer = useCallback((employee: Employee, eventType: "birthday" | "marriage_anniversary" | "work_anniversary") => {
     setWhatsappComposer({
       isOpen: true,
       employee,
@@ -624,17 +617,17 @@ export default function App() {
 
   const t = {
     appName: language === "ku" ? "ستاف" : "Staff",
-    welcomeTitle: language === "ku" ? "ستاف - سیستەمی بەڕێوەبردنی لۆیاڵیتی کارمەندەکان" : "Staff - Multi-Device Loyalty Portals",
-    welcomeDesc: language === "ku" ? "تایبەت بە لینیا، ماسیمۆ، و لیستۆن." : "Synchronized HR and Corporate Morale Hub for Linia, Massimo, and Liston businesses.",
+    welcomeTitle: language === "ku" ? "ستاف - سیستەمی بەڕێوەبردنی کارمەندەکان" : "Staff - Multi-Device Management Portals",
+    welcomeDesc: language === "ku" ? "تایبەت بە لینیا، ماسیمۆ، و لیستۆن." : "Synchronized HR Hub for Linia, Massimo, and Liston businesses.",
     loginBtn: language === "ku" ? "چوونە ژوورەوە بە هەژماری کۆمپانیا (Google)" : "Sign in securely with Google",
     guestBtn: language === "ku" ? "چوونە ژوورەوەی خێرا (کۆنتڕۆڵ کەر)" : "Sandbox Direct Access (Guest Developer)",
     employeesTab: language === "ku" ? "دۆسیەی کارمەندان 👤" : "Employee Profiles 👤",
     alertsTab: language === "ku" ? "ئاگەدارییەکان و بۆنەکان 🔔" : "Anniversary Warnings 🔔",
-    plannerTab: language === "ku" ? "پێشنیاری لۆیاڵیتی مانگانە 💡" : "Loyalty suggestions 💡",
+    plannerTab: language === "ku" ? "پێشنیاری مانگانەی ستاف 💡" : "Monthly suggestions 💡",
     monthsTab: language === "ku" ? "بۆنەی مانگەکان 📅" : "Monthly Celebrations 📅",
     activeStaffTitle: language === "ku" ? "کۆی گشتی کارمەندان" : "Total Corporate Staff",
     activeWarnings: language === "ku" ? "بۆنەی بەپەلە (٢ ڕۆژی تر)" : "Milestone Alerts (48h)",
-    rewardPointsTotal: language === "ku" ? "کۆی مۆڕاڵ و خاڵە دڵسۆزەکان" : "Total Morale Points Generated",
+    rewardPointsTotal: language === "ku" ? "مۆڕاڵ و دۆخی گشتی ستاف" : "General Staff Morale Status",
     multiDeviceLogo: language === "ku" ? "فایەربەیس هاوبەشکراو لەسەر چەندین ئامێر" : "Cloud Firebase Sync Enabled (Live updates across tabs)",
     demoWarning: language === "ku" ? "دۆسیەی کارمەندان بەتاڵە! دەتەوێت زانیاری کارمەندانی ڕاستەقینەی هەر سێ کۆمپانیاکە زیادبکەین کە لەگەڵ ڕێکەوتەکانی پیرۆزباییدا بگونجێت تا کارکردنی سیستەمەکە ببینی؟" : "Database looks empty! Would you like to initialize Kurdish employee portfolios with pre-configured birthday and wedding anniversaries to witness the automated warnings?",
     demoWarningBtn: language === "ku" ? "دروستکردنی ستافی ئەزموونی دەستبەجێ" : "Seed Premium Employee Datasets",
@@ -685,10 +678,11 @@ export default function App() {
     : activities;
 
   const businessTotalEmployeesCount = (() => {
+    const activeEmps = employees.filter((e) => !e.status || e.status === "active");
     if (!userSession || isSuperAdmin || userSession.business === "all") {
-      return employees.length;
+      return activeEmps.length;
     }
-    return employees.filter((e) => e.business === userSession.business).length;
+    return activeEmps.filter((e) => e.business === userSession.business).length;
   })();
 
   if (authLoading) {
@@ -978,8 +972,8 @@ export default function App() {
               </h2>
               <p className="text-[11px] lg:text-xs text-slate-500 font-bold select-none">
                 {language === "ku" 
-                  ? `${employees.length} کارمەند لە ٣ دامەزراوەی جیاواز` 
-                  : `${employees.length} Active employees in 3 corporations`}
+                  ? `${employees.filter((e) => !e.status || e.status === "active").length} کارمەندی چالاک لە دامەزراوەکان` 
+                  : `${employees.filter((e) => !e.status || e.status === "active").length} Active employees in corporations`}
               </p>
             </div>
           </div>
