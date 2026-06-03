@@ -15,7 +15,7 @@ export const BUSINESSES: Record<BusinessId, BusinessInfo> = {
   linia: {
     id: "linia",
     nameKu: "لینیا کارگە",
-    nameEn: "Linia Factory (Legacy)",
+    nameEn: "Lenya Factory (Legacy)",
     typeKu: "کارگەی دارتاشی گەورە",
     typeEn: "Large woodwork factory",
     scaleKu: "نزیکەی ٢٠ کارمەند",
@@ -25,7 +25,7 @@ export const BUSINESSES: Record<BusinessId, BusinessInfo> = {
   linia_karge: {
     id: "linia_karge",
     nameKu: "لینیا کارگە",
-    nameEn: "Linia Factory",
+    nameEn: "Lenya Factory",
     typeKu: "کارگەی دارتاشی گەورە",
     typeEn: "Large woodwork factory",
     scaleKu: "نزیکەی ٢٠ کارمەند",
@@ -35,7 +35,7 @@ export const BUSINESSES: Record<BusinessId, BusinessInfo> = {
   linia_shorish: {
     id: "linia_shorish",
     nameKu: "لینیا شۆرش",
-    nameEn: "Linia Shorish Showroom",
+    nameEn: "Lenya Shorish Showroom",
     typeKu: "پێشانگای ناومۆبیلی سەرەکی کۆمپانیا",
     typeEn: "Furniture & Decor Showroom",
     scaleKu: "نزیکەی ١٠ کارمەند",
@@ -45,7 +45,7 @@ export const BUSINESSES: Record<BusinessId, BusinessInfo> = {
   linia_shasty: {
     id: "linia_shasty",
     nameKu: "لینیا شەستی",
-    nameEn: "Linia Shasty Showroom",
+    nameEn: "Lenya Shasty Showroom",
     typeKu: "پێشانگای شەست مەتری مۆبێل",
     typeEn: "60-Meter Showroom",
     scaleKu: "نزیکەی ١٠ کارمەند",
@@ -55,7 +55,7 @@ export const BUSINESSES: Record<BusinessId, BusinessInfo> = {
   linia_mosul: {
     id: "linia_mosul",
     nameKu: "لینیا موسڵ",
-    nameEn: "Linia Mosul Showroom",
+    nameEn: "Lenya Mosul Showroom",
     typeKu: "پێشانگای لقی موسڵ",
     typeEn: "Mosul Showroom Shop",
     scaleKu: "نزیکەی ١٠ کارمەند",

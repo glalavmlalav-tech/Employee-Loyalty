@@ -206,7 +206,9 @@ export default function EmployeeDirectory({
   const handleOpenAdd = () => {
     setFormData({
       name: "",
-      business: (userSession?.role === "admin" && userSession?.business !== "all" ? userSession.business : "linia_karge") as BusinessId,
+      business: (userSession?.role === "admin" && userSession?.business !== "all" 
+        ? (userSession.business === "linia" ? "linia_karge" : userSession.business) 
+        : "linia_karge") as BusinessId,
       role: "",
       phone: "",
       birthDate: "",
@@ -361,23 +363,35 @@ export default function EmployeeDirectory({
 
   // Counts for each view based on business restriction
   const activeCount = employees.filter(emp => {
-    if (userSession && userSession.business !== "all" && emp.business !== userSession.business) {
-      return false;
+    if (userSession && userSession.business !== "all") {
+      const userBiz = userSession.business === "linia" ? "linia_karge" : userSession.business;
+      const empBiz = emp.business === "linia" ? "linia_karge" : emp.business;
+      if (empBiz !== userBiz) {
+        return false;
+      }
     }
     return !emp.status || emp.status === "active";
   }).length;
 
   const archivedCount = employees.filter(emp => {
-    if (userSession && userSession.business !== "all" && emp.business !== userSession.business) {
-      return false;
+    if (userSession && userSession.business !== "all") {
+      const userBiz = userSession.business === "linia" ? "linia_karge" : userSession.business;
+      const empBiz = emp.business === "linia" ? "linia_karge" : emp.business;
+      if (empBiz !== userBiz) {
+        return false;
+      }
     }
     return emp.status === "retired" || emp.status === "suspended";
   }).length;
 
   // Filter Employees
   const filteredEmployees = employees.filter((emp) => {
-    if (userSession && userSession.business !== "all" && emp.business !== userSession.business) {
-      return false;
+    if (userSession && userSession.business !== "all") {
+      const userBiz = userSession.business === "linia" ? "linia_karge" : userSession.business;
+      const empBiz = emp.business === "linia" ? "linia_karge" : emp.business;
+      if (empBiz !== userBiz) {
+        return false;
+      }
     }
     // Filter by Active vs Archived status
     const isEmpActive = !emp.status || emp.status === "active";
@@ -392,7 +406,10 @@ export default function EmployeeDirectory({
       emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.phone.includes(searchTerm);
-    const matchesBusiness = selectedBusinessFilter === "all" || emp.business === selectedBusinessFilter;
+    
+    const filterBiz = selectedBusinessFilter === "linia" ? "linia_karge" : selectedBusinessFilter;
+    const empBiz = emp.business === "linia" ? "linia_karge" : emp.business;
+    const matchesBusiness = selectedBusinessFilter === "all" || empBiz === filterBiz;
     return matchesSearch && matchesBusiness;
   });
 

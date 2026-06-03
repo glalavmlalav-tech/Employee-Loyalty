@@ -618,7 +618,7 @@ export default function App() {
   const t = {
     appName: language === "ku" ? "ستاف" : "Staff",
     welcomeTitle: language === "ku" ? "ستاف - سیستەمی بەڕێوەبردنی کارمەندەکان" : "Staff - Multi-Device Management Portals",
-    welcomeDesc: language === "ku" ? "تایبەت بە لینیا، ماسیمۆ، و لیستۆن." : "Synchronized HR Hub for Linia, Massimo, and Liston businesses.",
+    welcomeDesc: language === "ku" ? "تایبەت بە لینیا، ماسیمۆ، و لیستۆن." : "Synchronized HR Hub for Lenya, Massimo, and Liston businesses.",
     loginBtn: language === "ku" ? "چوونە ژوورەوە بە هەژماری کۆمپانیا (Google)" : "Sign in securely with Google",
     guestBtn: language === "ku" ? "چوونە ژوورەوەی خێرا (کۆنتڕۆڵ کەر)" : "Sandbox Direct Access (Guest Developer)",
     employeesTab: language === "ku" ? "دۆسیەی کارمەندان 👤" : "Employee Profiles 👤",
@@ -642,8 +642,12 @@ export default function App() {
 
   const displayEmployees = employees.filter((e) => {
     // 1. Business boundary alignment
-    if (isRestrictedBusiness && e.business !== restrictedBusinessId) {
-      return false;
+    if (isRestrictedBusiness) {
+      const userBiz = restrictedBusinessId === "linia" ? "linia_karge" : restrictedBusinessId;
+      const empBiz = e.business === "linia" ? "linia_karge" : e.business;
+      if (empBiz !== userBiz) {
+        return false;
+      }
     }
     // No Creator restriction: Any admin sees all employees in their business
     return true;
@@ -658,7 +662,11 @@ export default function App() {
   );
 
   const displayActivities = isRestrictedBusiness
-    ? activities.filter((act) => act.businessFocus === restrictedBusinessId || act.businessFocus === "all")
+    ? activities.filter((act) => {
+        const userBiz = restrictedBusinessId === "linia" ? "linia_karge" : restrictedBusinessId;
+        const actBiz = act.businessFocus === "linia" ? "linia_karge" : act.businessFocus;
+        return actBiz === userBiz || actBiz === "all";
+      })
     : activities;
 
   const businessTotalEmployeesCount = (() => {
@@ -666,7 +674,11 @@ export default function App() {
     if (!userSession || isSuperAdmin || userSession.business === "all") {
       return activeEmps.length;
     }
-    return activeEmps.filter((e) => e.business === userSession.business).length;
+    const userBiz = userSession.business === "linia" ? "linia_karge" : userSession.business;
+    return activeEmps.filter((e) => {
+      const empBiz = e.business === "linia" ? "linia_karge" : e.business;
+      return empBiz === userBiz;
+    }).length;
   })();
 
   if (authLoading) {
