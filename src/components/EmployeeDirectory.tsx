@@ -1435,6 +1435,21 @@ export default function EmployeeDirectory({
                         </span>
                       )}
                     </button>
+                    {userSession?.role === "observer" && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReportingEmployee(emp);
+                          setReportValue("");
+                          setShowReportModal(true);
+                        }}
+                        className="px-3 py-1.5 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border border-slate-200 hover:border-red-100 rounded-xl font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm cursor-pointer"
+                        title={language === "ku" ? "ڕاپۆرتکردنی زانیاری نادروست" : "Report Incorrect Info"}
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5 text-red-500 animate-pulse" />
+                        {language === "ku" ? "ڕاپۆرتکردن" : "Report"}
+                      </button>
+                    )}
                     {userSession?.role !== "admin" && userSession?.role !== "observer" && (
                       <button
                         onClick={() => handleDelete(emp.id)}
@@ -1870,7 +1885,7 @@ export default function EmployeeDirectory({
                 </div>
 
                 <div className="flex gap-3 justify-end border-t border-slate-100 pt-5 mt-2">
-                  {isReadOnly && userSession?.role !== "observer" && (
+                  {isReadOnly && (
                     <button
                       type="button"
                       onClick={() => {
@@ -1880,7 +1895,7 @@ export default function EmployeeDirectory({
                       }}
                       className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all duration-300 transform hover:scale-105 hover:-translate-y-0.5 hover:opacity-90 shadow-md shadow-red-600/10 cursor-pointer active:scale-95"
                     >
-                      <AlertTriangle className="w-4 h-4" />
+                      <AlertTriangle className="w-4 h-4 animate-pulse" />
                       {language === "ku" ? "ناردنی ڕاپۆرت" : "Send Report"}
                     </button>
                   )}
