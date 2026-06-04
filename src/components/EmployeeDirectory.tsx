@@ -5,6 +5,7 @@ import {
   UserPlus, 
   Trash2, 
   Edit, 
+  Crop,
   Phone, 
   Calendar, 
   Award, 
@@ -23,7 +24,8 @@ import {
   RefreshCw,
   Shield,
   Clock,
-  Printer
+  Printer,
+  AlertTriangle
 } from "lucide-react";
 import { Employee, BusinessId, BUSINESSES, MaritalStatus, EmployeeStatus } from "../types";
 import ImageCropper from "./ImageCropper";
@@ -152,10 +154,28 @@ export default function EmployeeDirectory({
     EXPORT_FIELDS.map(f => f.id)
   );
 
+  // PDF Selection and Print Config State
+  const [showPDFConfigModal, setShowPDFConfigModal] = useState(false);
+  const [pdfConfig, setPdfConfig] = useState({
+    density: "1" as "1" | "2" | "4" | "9",
+    showPhoto: true,
+    showContactPhone: true,
+    showEmergencyContact: true,
+    showResidence: true,
+    showStampArea: true,
+    showPersonalDetails: true,
+    showCorporateHeader: true,
+    colorTheme: "default" as "default" | "monochrome" | "emerald" | "indigo",
+  });
+
   const [showCamera, setShowCamera] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraFacingMode, setCameraFacingMode] = useState<"user" | "environment">("user");
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportValue, setReportValue] = useState("");
+  const [reportingEmployee, setReportingEmployee] = useState<Employee | null>(null);
+  const [showPhotoEditDropdown, setShowPhotoEditDropdown] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -448,10 +468,7 @@ export default function EmployeeDirectory({
       );
       return;
     }
-    
-    setTimeout(() => {
-      window.print();
-    }, 150);
+    setShowPDFConfigModal(true);
   };
 
   const performExportCSV = () => {
@@ -536,6 +553,474 @@ export default function EmployeeDirectory({
     document.body.removeChild(link);
     
     setShowExportModal(false);
+  };
+
+  const renderPrintCard = (emp: Employee, densityMode: "1" | "2" | "4" | "9", isSimulatedPreview = false) => {
+    const biz = BUSINESSES[emp.business];
+    const isMarried = emp.maritalStatus === "married";
+    
+    let themeHex = "#f59e0b"; // amber-500
+    let themeBg = "bg-amber-500/[0.04]";
+    let themeText = "text-amber-800";
+    let themeBorder = "border-amber-500/20";
+    let themeBadge = "bg-amber-500 text-white";
+    
+    const empBiz = emp.business === "linia" ? "linia_karge" : emp.business;
+    if (empBiz.startsWith("linia")) {
+      themeHex = "#f59e0b";
+      themeBg = isSimulatedPreview ? "bg-amber-50" : "bg-amber-500/[0.04]";
+      themeText = "text-amber-800";
+      themeBorder = "border-amber-500/20";
+      themeBadge = "bg-amber-500 text-white";
+    } else if (empBiz === "massimo") {
+      themeHex = "#6366f1";
+      themeBg = isSimulatedPreview ? "bg-indigo-50" : "bg-indigo-500/[0.04]";
+      themeText = "text-indigo-800";
+      themeBorder = "border-indigo-500/20";
+      themeBadge = "bg-indigo-600 text-white";
+    } else if (empBiz === "liston") {
+      themeHex = "#10b981";
+      themeBg = isSimulatedPreview ? "bg-emerald-50" : "bg-emerald-500/[0.04]";
+      themeText = "text-emerald-800";
+      themeBorder = "border-emerald-500/20";
+      themeBadge = "bg-emerald-600 text-white";
+    }
+
+    if (densityMode === "1") {
+      // FULL DOSSIER
+      return (
+        <div 
+          className={`flex flex-col justify-between h-full w-full bg-white relative overflow-hidden select-none text-right md:text-left ${isSimulatedPreview ? 'p-3' : 'p-8 min-h-[265mm] border border-slate-200 rounded-[35px]'}`}
+          style={{ 
+            boxSizing: "border-box" 
+          }}
+        >
+          {/* Top colored accent line */}
+          <div className="absolute top-0 left-0 w-full h-[6px]" style={{ backgroundColor: themeHex }} />
+
+          <div>
+            {/* Top Brand Header */}
+            {pdfConfig.showCorporateHeader && (
+              <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center">
+                    <Shield className="w-5.5 h-5.5 text-slate-800" />
+                  </div>
+                  <div className="text-left">
+                    <h2 className="text-[10px] font-black text-slate-900 tracking-wider uppercase font-sans">
+                      {language === "ku" ? "کۆمەڵەی لێنیا و هاوبەشەکانی" : "LENYA & AFFILIATES GROUP"}
+                    </h2>
+                    <span className="text-[8px] font-bold text-slate-400 font-sans tracking-wide block">
+                      {language === "ku" ? "سیستەمی فەرمی ناوەندی سەرچاوە مرۆییەکان" : "Unified Corporate HR Management Dossier"}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[8px] font-black uppercase tracking-widest text-slate-400 font-sans">
+                    {language === "ku" ? "کۆدی دۆسیە" : "DOSSIER REF ID"}
+                  </div>
+                  <div className="text-[10px] font-black text-slate-800 font-sans tracking-wider">
+                    #HR-{emp.id.substring(0, 7).toUpperCase()}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Profile Block */}
+            <div className="grid grid-cols-12 gap-6 mb-5 items-center bg-slate-50/50 border border-slate-100 p-4 rounded-[22px]">
+              {pdfConfig.showPhoto && (
+                <div className="col-span-4 flex justify-center">
+                  {emp.photoUrl ? (
+                    <div className="relative p-0.5 bg-white border border-slate-200 shadow-xs rounded-full">
+                      <img 
+                        src={emp.photoUrl} 
+                        alt={emp.name} 
+                        className="w-24 h-24 rounded-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center border border-dashed border-slate-300 text-slate-400">
+                      <User className="w-10 h-10" />
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <div className={`${pdfConfig.showPhoto ? "col-span-8" : "col-span-12"} space-y-2.5 text-right md:text-left`}>
+                <div>
+                  <h1 className="text-base font-black text-slate-900 tracking-tight font-display mb-0.5">{emp.name}</h1>
+                  <p className="text-[10px] font-bold text-slate-500 font-sans uppercase tracking-wider">{emp.role}</p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 justify-end md:justify-start">
+                  <span className={`text-[8px] font-black uppercase tracking-wider leading-none px-2 py-0.5 rounded-full border ${themeBg} ${themeText} ${themeBorder}`}>
+                    {biz ? (language === "ku" ? biz.nameKu : biz.nameEn) : emp.business}
+                  </span>
+                  <span className="text-[8px] font-black uppercase tracking-wider leading-none px-2 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-200">
+                    {emp.status === "active" ? (language === "ku" ? "چالاک" : "Active") : emp.status === "suspended" ? (language === "ku" ? "ڕاگیراو" : "Suspended") : (language === "ku" ? "خانەنشین" : "Retired")}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-[10px] pt-2 border-t border-slate-100/80">
+                  <div>
+                    <div className="text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-0.5">{language === "ku" ? "بزنس / لقی دیاریکراو" : "Sector branch"}</div>
+                    <div className="font-bold text-slate-700 truncate">{biz ? (language === "ku" ? biz.typeKu : biz.typeEn) : "-"}</div>
+                  </div>
+                  <div>
+                    <div className="text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-0.5">{language === "ku" ? "ڕێکەوتی دامەزراندن" : "Onboarding"}</div>
+                    <div className="font-bold text-slate-700 font-sans">{emp.hireDate || "-"}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Informational blocks */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Core Personal Details Card */}
+              {pdfConfig.showPersonalDetails && (
+                <div className="border border-slate-150 p-4 rounded-[20px] bg-white">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1.5 mb-2.5 flex items-center gap-1.5">
+                    <Award className="w-3.5 h-3.5 text-amber-500" />
+                    {language === "ku" ? "زانیاری کەسیی سەرەکی" : "Core Personal Profile"}
+                  </h3>
+                  
+                  <div className="space-y-1.5 text-[10px] font-semibold">
+                    <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
+                      <span className="text-slate-400">{language === "ku" ? "ڕێکەوتی لەدایکبوون" : "Birth Date"}</span>
+                      <span className="text-slate-800 font-sans">{emp.birthDate || "-"}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
+                      <span className="text-slate-400">{language === "ku" ? "بارودۆخی خێزانی" : "Marital Status"}</span>
+                      <span className="text-slate-800">
+                        {emp.maritalStatus === "married" ? (language === "ku" ? "هاوسەرگیریکردوو 💍" : "Married 💍") : (language === "ku" ? "سەڵت 👤" : "Single 👤")}
+                      </span>
+                    </div>
+
+                    {isMarried && emp.marriageAnniversary && (
+                      <div className="flex items-center justify-between py-1 border-b border-slate-100/50 bg-amber-500/[0.02] px-2 rounded-md border border-amber-500/10">
+                        <span className="text-amber-800 font-bold">{language === "ku" ? "ڕۆژی هاوسەرگیری" : "Wedding Anniv."}</span>
+                        <span className="text-amber-900 font-sans font-bold">{emp.marriageAnniversary}</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
+                      <span className="text-slate-400">{language === "ku" ? "ڕەگەزنامە" : "Citizenship"}</span>
+                      <span className="text-slate-800">{emp.citizenship || "-"}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between py-1">
+                      <span className="text-slate-400">{language === "ku" ? "نەتەوە" : "Ethnicity"}</span>
+                      <span className="text-slate-800">{emp.ethnicity || "-"}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Contacts Card */}
+              {(pdfConfig.showContactPhone || pdfConfig.showEmergencyContact || pdfConfig.showResidence) && (
+                <div className="border border-slate-150 p-4 rounded-[20px] bg-white">
+                  <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1.5 mb-2.5 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-emerald-500" />
+                    {language === "ku" ? "پەیوەندی و ناونیشان" : "Contact & Geography"}
+                  </h3>
+                  
+                  <div className="space-y-1.5 text-[10px] font-semibold">
+                    {pdfConfig.showContactPhone && (
+                      <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
+                        <span className="text-slate-400">{language === "ku" ? "ژمارەی مۆبایل" : "Phone"}</span>
+                        <span className="text-slate-800 font-sans tracking-wide">{emp.phone || "-"}</span>
+                      </div>
+                    )}
+
+                    {pdfConfig.showEmergencyContact && (
+                      <>
+                        <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
+                          <span className="text-slate-400">{language === "ku" ? "فریاکەوتنی خێرا" : "Emerg. Phone"}</span>
+                          <span className="text-slate-800 font-sans">{emp.emergencyContactPhone || "-"}</span>
+                        </div>
+                        {emp.emergencyContactRelation && (
+                          <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
+                            <span className="text-slate-400">{language === "ku" ? "پەیوەندی فریاکەوتن" : "Emerg. Relation"}</span>
+                            <span className="text-slate-800">{emp.emergencyContactRelation}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {pdfConfig.showResidence && (
+                      <div className="flex items-start justify-between py-1">
+                        <span className="text-slate-400 shrink-0">{language === "ku" ? "ناونیشان" : "Residence"}</span>
+                        <span className="text-slate-850 text-right leading-tight max-w-[130px] font-medium block">
+                          {emp.residenceAddress || "-"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Stamp and Authorization Info */}
+          {pdfConfig.showStampArea && (
+            <div className="border-t border-slate-100 pt-3 mt-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 p-2 rounded-xl">
+                <svg className="w-8 h-8 text-slate-700 shrink-0 border border-slate-200 p-0.5 bg-white rounded-md" viewBox="0 0 100 100" fill="currentColor">
+                  <rect x="10" y="10" width="20" height="20" />
+                  <rect x="70" y="10" width="20" height="20" />
+                  <rect x="10" y="70" width="20" height="20" />
+                  <rect x="35" y="35" width="30" height="30" />
+                  <rect x="40" y="10" width="10" height="15" />
+                  <rect x="80" y="40" width="10" height="20" />
+                </svg>
+                <div className="text-[7px] font-bold text-slate-400 leading-snug font-sans">
+                  {language === "ku" ? "چاپکراو لە ئەرشیفی" : "Printed from certified systems"}
+                  <span className="text-slate-500 font-semibold block">{new Date().toLocaleDateString('ku-IQ')}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[7px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                  {language === "ku" ? "مۆر و واژۆ" : "STAMP"}
+                </div>
+                <div className="inline-block w-24 border-b border-dashed border-slate-300 h-3"></div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (densityMode === "2") {
+      // 2 EMPLOYEES PER PAGE (HALF PAGE CARD)
+      return (
+        <div 
+          className={`flex flex-col justify-between h-full w-full bg-white relative overflow-hidden text-right md:text-left ${isSimulatedPreview ? 'p-2' : 'p-5 border border-slate-200 rounded-[24px]'}`}
+          style={{ boxSizing: "border-box" }}
+        >
+          <div className="absolute top-0 right-0 w-32 h-32 rounded-full filter blur-2xl opacity-10 pointer-events-none bg-slate-400" />
+          <div className="absolute top-0 left-0 w-full h-[4px]" style={{ backgroundColor: themeHex }} />
+
+          <div>
+            {/* Minimal Header */}
+            {pdfConfig.showCorporateHeader && (
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
+                <span className="text-[8px] font-black tracking-wider text-slate-800">
+                  {language === "ku" ? "کۆمەڵەی لێنیا" : "LENYA GROUP"}
+                </span>
+                <span className="text-[8px] font-bold text-slate-400 font-mono">
+                  #HR-{emp.id.substring(0, 5).toUpperCase()}
+                </span>
+              </div>
+            )}
+
+            {/* Profile split */}
+            <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 p-2.5 rounded-xl mb-2.5">
+              {pdfConfig.showPhoto && (
+                <div className="shrink-0">
+                  {emp.photoUrl ? (
+                    <img 
+                      src={emp.photoUrl} 
+                      alt={emp.name} 
+                      className="w-14 h-14 rounded-full object-cover border border-slate-200 bg-white"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-400">
+                      <User className="w-6 h-6" />
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <h3 className="text-xs font-black text-slate-900 truncate mb-0.5">{emp.name}</h3>
+                <p className="text-[9px] font-extrabold text-slate-500 leading-none">{emp.role}</p>
+                <div className="mt-1.5 flex items-center gap-1">
+                  <span className={`text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${themeBg} ${themeText}`}>
+                    {biz ? (language === "ku" ? biz.nameKu : biz.nameEn) : emp.business}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Combined compact details list */}
+            <div className="grid grid-cols-2 gap-3 text-[9px] text-slate-700">
+              {pdfConfig.showPersonalDetails && (
+                <div className="space-y-1">
+                  <div className="flex justify-between border-b border-slate-100 pb-0.5">
+                    <span className="text-slate-400">{language === "ku" ? "لەدایکبوون" : "Birth"}</span>
+                    <span className="font-semibold font-sans">{emp.birthDate || "-"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">{language === "ku" ? "خێزانی" : "Marital"}</span>
+                    <span className="font-semibold truncate">
+                      {emp.maritalStatus === "married" ? (language === "ku" ? "هاوسەرگیر" : "Married") : (language === "ku" ? "سەڵت" : "Single")}
+                    </span>
+                  </div>
+                </div>
+              )}
+              
+              <div className="space-y-1">
+                {pdfConfig.showContactPhone && (
+                  <div className="flex justify-between border-b border-slate-100 pb-0.5">
+                    <span className="text-slate-400">{language === "ku" ? "مۆبایل" : "Phone"}</span>
+                    <span className="font-semibold font-sans truncate">{emp.phone || "-"}</span>
+                  </div>
+                )}
+                {pdfConfig.showEmergencyContact && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">{language === "ku" ? "فریاکەوتن" : "Emerg"}</span>
+                    <span className="font-semibold font-sans truncate">{emp.emergencyContactPhone || "-"}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            {pdfConfig.showResidence && emp.residenceAddress && (
+              <div className="text-[8px] text-slate-500 mt-2 p-1.5 bg-slate-50 rounded border border-slate-100 overflow-hidden text-ellipsis whitespace-nowrap">
+                <span className="font-bold text-slate-400 mr-1">{language === "ku" ? "ناونیشان:" : "Address:"}</span>
+                {emp.residenceAddress}
+              </div>
+            )}
+          </div>
+
+          {pdfConfig.showStampArea && (
+            <div className="border-t border-slate-100 pt-1.5 mt-2 flex items-center justify-between text-[8px]">
+              <span className="text-slate-400 font-mono">HR Verified {new Date().toLocaleDateString()}</span>
+              <div className="inline-block w-16 border-b border-dashed border-slate-300 h-1"></div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (densityMode === "4") {
+      // 4 EMPLOYEES PER PAGE (QUARTER BADGE 2x2 GRID)
+      return (
+        <div 
+          className={`flex flex-col justify-between h-full w-full bg-white relative overflow-hidden text-right md:text-left ${isSimulatedPreview ? 'p-1.5' : 'p-3.5 border border-slate-200 rounded-[16px]'}`}
+          style={{ boxSizing: "border-box" }}
+        >
+          <div className="absolute top-0 left-0 w-1.5 h-full" style={{ backgroundColor: themeHex }} />
+
+          <div className="pl-2">
+            {/* Card row header */}
+            <div className="flex items-center justify-between border-b border-slate-100/60 pb-1 mb-1.5">
+              <span className={`text-[7px] font-black uppercase tracking-wider px-1.5 rounded ${themeBg} ${themeText}`}>
+                {biz ? (language === "ku" ? biz.nameKu : biz.nameEn) : emp.business}
+              </span>
+              <span className="text-[7.5px] font-bold text-slate-400 font-sans">#HR-{emp.id.substring(0, 4).toUpperCase()}</span>
+            </div>
+
+            {/* Profile minimal flex */}
+            <div className="flex items-center gap-2 mb-2">
+              {pdfConfig.showPhoto && (
+                <div className="shrink-0">
+                  {emp.photoUrl ? (
+                    <img 
+                      src={emp.photoUrl} 
+                      alt={emp.name} 
+                      className="w-10 h-10 rounded-full object-cover border border-slate-150"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 border border-slate-150">
+                      <User className="w-5 h-5" />
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="min-w-0 flex-1 leading-normal">
+                <h4 className="text-[10px] font-black text-slate-900 truncate leading-tight">{emp.name}</h4>
+                <p className="text-[8px] font-semibold text-slate-500 truncate leading-tight">{emp.role}</p>
+                {pdfConfig.showContactPhone && emp.phone && (
+                  <span className="text-[7.5px] text-slate-600 font-sans tracking-wide block leading-tight">{emp.phone}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Ultra minimal items list */}
+            <div className="space-y-0.5 text-[8.5px] text-slate-700 bg-slate-50 p-1 rounded-lg border border-slate-100/50">
+              {pdfConfig.showPersonalDetails && (
+                <div className="flex justify-between leading-none py-0.5">
+                  <span className="text-slate-450">{language === "ku" ? "لەدایکبوون" : "Birth"}</span>
+                  <span className="font-bold text-slate-700 font-sans">{emp.birthDate || "-"}</span>
+                </div>
+              )}
+              {pdfConfig.showEmergencyContact && emp.emergencyContactPhone && (
+                <div className="flex justify-between leading-none py-0.5">
+                  <span className="text-slate-450">{language === "ku" ? "بۆنەی نزیک" : "Emergency"}</span>
+                  <span className="font-semibold text-slate-700 font-sans">{emp.emergencyContactPhone}</span>
+                </div>
+              )}
+              {pdfConfig.showResidence && emp.residenceAddress && (
+                <div className="flex justify-between leading-none py-0.5 truncate gap-1">
+                  <span className="text-slate-450 shrink-0">{language === "ku" ? "ناوچە" : "Location"}</span>
+                  <span className="font-semibold text-slate-700 truncate">{emp.residenceAddress}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {pdfConfig.showStampArea && (
+            <div className="border-t border-slate-100 pt-1 flex items-center justify-between text-[7px] text-slate-450 leading-none pl-2">
+              <span>{language === "ku" ? "پەسەندکراوە" : "HR Validated"}</span>
+              <span className="font-mono">{new Date().toLocaleDateString(language === "ku" ? "ku-IQ" : "en-US")}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    if (densityMode === "9") {
+      // 9 EMPLOYEES PER PAGE (3x3 MICRO IDENTIFICATION LABELS)
+      return (
+        <div 
+          className={`flex flex-col justify-between h-full w-full bg-white relative overflow-hidden text-right md:text-left ${isSimulatedPreview ? 'p-1' : 'p-2.5 border border-slate-150 rounded-[10px]'}`}
+          style={{ boxSizing: "border-box" }}
+        >
+          {/* Accent thin top line */}
+          <div className="absolute top-0 left-0 w-full h-[2.5px]" style={{ backgroundColor: themeHex }} />
+
+          <div className="text-[7.5px] font-sans text-slate-400 font-extrabold pb-0.5 border-b border-slate-105 select-none flex justify-between leading-none">
+            <span>#{emp.id.substring(0, 4).toUpperCase()}</span>
+            <span>{biz ? (language === "ku" ? biz.nameKu : biz.nameEn) : emp.business}</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 my-1 min-w-0">
+            {pdfConfig.showPhoto && (
+              <div className="shrink-0">
+                {emp.photoUrl ? (
+                  <img 
+                    src={emp.photoUrl} 
+                    alt={emp.name} 
+                    className="w-7 h-7 rounded-full object-cover border border-slate-100 shadow-[0_1px_2px_rgba(0,0,0,0.02)] bg-slate-50"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-slate-50 flex items-center justify-center text-slate-350 border border-slate-200">
+                    <User className="w-3.5 h-3.5" />
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="min-w-0 flex-1 leading-normal">
+              <h5 className="text-[8px] font-black text-slate-900 truncate leading-none mb-0.5">{emp.name}</h5>
+              <p className="text-[7px] font-bold text-slate-500 truncate leading-none">{emp.role}</p>
+              {pdfConfig.showContactPhone && emp.phone && (
+                <p className="text-[6.5px] text-slate-450 font-mono tracking-tighter truncate mt-0.5 leading-none">{emp.phone}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="text-[6px] text-slate-400 leading-none pt-0.5 border-t border-slate-100 flex items-center justify-between font-mono">
+            <span>OFFICIAL ID</span>
+            <span>{new Date().toLocaleDateString()}</span>
+          </div>
+        </div>
+      );
+    }
   };
 
   return (
@@ -744,9 +1229,19 @@ export default function EmployeeDirectory({
                         <p className="text-xs text-slate-500 font-semibold font-sans mt-0.5 leading-none">{emp.role}</p>
                       </div>
                     </div>
-                    <span className={`text-[10px] uppercase font-black px-2.5 py-1 rounded-lg border ${statusConfig[emp.status]} shadow-sm shrink-0`}>
-                      {emp.status === "active" ? t.active : emp.status === "suspended" ? t.suspended : t.retired}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isSuperAdmin && emp.reportText && emp.reportStatus === "pending" && (
+                        <div 
+                          className="bg-rose-500 text-white p-1.5 rounded-full animate-bounce shrink-0 shadow-sm"
+                          title={language === "ku" ? `ڕاپۆرتی زانیاری هەڵە هەیە: ${emp.reportText}` : `Has incorrect info report: ${emp.reportText}`}
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5 stroke-[3]" />
+                        </div>
+                      )}
+                      <span className={`text-[10px] uppercase font-black px-2.5 py-1 rounded-lg border ${statusConfig[emp.status]} shadow-sm shrink-0`}>
+                        {emp.status === "active" ? t.active : emp.status === "suspended" ? t.suspended : t.retired}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Business Badge */}
@@ -882,6 +1377,33 @@ export default function EmployeeDirectory({
                 </div>
 
                 <div className="mt-5 border-t border-slate-100 pt-4 flex flex-col gap-2">
+                  {isSuperAdmin && emp.reportText && emp.reportStatus === "pending" && (
+                    <div className="p-3 bg-rose-50 border border-rose-150 rounded-2xl flex flex-col gap-2 text-rose-850 text-xs">
+                      <div className="flex items-start gap-1.5 font-bold">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5 animate-pulse" />
+                        <div>
+                          <span className="text-rose-955 font-black">
+                            {language === "ku" ? `ڕاپۆرتی زانیاری هەڵە لەلایەن: ${emp.reportUser || "ئەدمین"}` : `Incorrect Info reported by: ${emp.reportUser || "Admin"}`}
+                          </span>
+                          <p className="text-[10.5px] text-rose-800 mt-1 font-semibold font-sans bg-white/75 p-2 rounded-xl border border-red-500/10 leading-relaxed whitespace-pre-wrap">
+                            {emp.reportText}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex justify-end pt-0.5">
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            await onUpdateEmployee(emp.id, { reportStatus: "resolved" });
+                          }}
+                          className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <Check className="w-3 h-3 stroke-[3]" />
+                          {language === "ku" ? "ئۆکەی، خوێندمەوە" : "OK, Acknowledged"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex gap-2 justify-between items-center flex-wrap">
                     <div>
                       {isSuperAdmin && emp.createdBy && (
@@ -954,6 +1476,39 @@ export default function EmployeeDirectory({
 
               <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
                 
+                {isSuperAdmin && editingEmployee?.reportText && editingEmployee?.reportStatus === "pending" && (
+                  <div className="p-3 bg-rose-50 border border-rose-150 rounded-2xl flex flex-col gap-2 text-rose-850 text-xs shadow-sm">
+                    <div className="flex items-start gap-1.5 font-bold">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5 animate-pulse" />
+                      <div>
+                        <span className="text-rose-955 font-black">
+                          {language === "ku" ? `ڕاپۆرتی زانیاری هەڵە لەلایەن: ${editingEmployee.reportUser || "ئەدمین"}` : `Incorrect Info reported by: ${editingEmployee.reportUser || "Admin"}`}
+                        </span>
+                        <p className="text-[10.5px] text-rose-800 mt-1 font-semibold font-sans bg-white/75 p-2 rounded-xl border border-red-500/10 leading-relaxed whitespace-pre-wrap">
+                          {editingEmployee.reportText}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex justify-end pt-0.5">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!editingEmployee) return;
+                          await onUpdateEmployee(editingEmployee.id, { reportStatus: "resolved" });
+                          setEditingEmployee({
+                            ...editingEmployee,
+                            reportStatus: "resolved"
+                          });
+                        }}
+                        className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-black rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <Check className="w-3 h-3 stroke-[3]" />
+                        {language === "ku" ? "ئۆکەی، خوێندمەوە (چاککراو)" : "OK, Acknowledged"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
                 {/* Employee Picture Upload/Capture Container */}
                 <div className="flex flex-col items-center justify-center bg-slate-50/75 border border-slate-100 p-4 rounded-[24px]">
                   <span className="text-xs font-bold text-slate-700 mb-2">
@@ -986,7 +1541,7 @@ export default function EmployeeDirectory({
                   {!isReadOnly && (
                     <div className="flex flex-col gap-2 w-full max-w-xs">
                       {/* Interactive Buttons */}
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 relative">
                         {/* Hidden File Input */}
                         <label className="flex-1 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl flex items-center justify-center gap-1.5 text-xs text-slate-700 font-bold shadow-sm cursor-pointer transition">
                           <Upload className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
@@ -1027,6 +1582,60 @@ export default function EmployeeDirectory({
                           <Camera className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                           <span>{showCamera ? (language === "ku" ? "داخستن" : "Close") : (language === "ku" ? "کامێرا" : "Camera")}</span>
                         </button>
+
+                        {/* Super Admin Edit Photo Options */}
+                        {isSuperAdmin && formData.photoUrl && (
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setShowPhotoEditDropdown(!showPhotoEditDropdown)}
+                              className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/50 text-indigo-950 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold shadow-sm transition cursor-pointer"
+                            >
+                              <Edit className="w-3.5 h-3.5 text-indigo-650 shrink-0" />
+                              <span>{language === "ku" ? "دەستکاری" : "Edit"}</span>
+                            </button>
+
+                            {showPhotoEditDropdown && (
+                              <>
+                                <div 
+                                  className="fixed inset-0 z-30" 
+                                  onClick={() => setShowPhotoEditDropdown(false)} 
+                                />
+                                <div className="absolute right-0 mt-2 w-52 bg-white border border-slate-100 rounded-2xl shadow-xl z-40 p-1.5 flex flex-col gap-1 transform origin-top-right transition-all scale-100 border border-slate-200 leading-normal">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setImageToCrop(formData.photoUrl);
+                                      setShowPhotoEditDropdown(false);
+                                    }}
+                                    className="w-full text-right px-3 py-2 text-xs font-semibold text-slate-755 hover:bg-indigo-50 hover:text-indigo-900 rounded-xl flex items-center gap-2 transition cursor-pointer"
+                                  >
+                                    <Crop className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                    <span>{language === "ku" ? "کرۆپکردنەوەی وێنە" : "Re-crop Image"}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (!formData.photoUrl) return;
+                                      const link = document.createElement("a");
+                                      link.href = formData.photoUrl;
+                                      const safeName = formData.name.trim().replace(/\s+/g, "_") || "employee_photo";
+                                      link.download = `${safeName}.png`;
+                                      document.body.appendChild(link);
+                                      link.click();
+                                      document.body.removeChild(link);
+                                      setShowPhotoEditDropdown(false);
+                                    }}
+                                    className="w-full text-right px-3 py-2 text-xs font-semibold text-slate-755 hover:bg-indigo-50 hover:text-indigo-900 rounded-xl flex items-center gap-2 transition cursor-pointer"
+                                  >
+                                    <Download className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                    <span>{language === "ku" ? "داونلۆدکردنی وێنە" : "Download Photo"}</span>
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Video Camera Live Stream Container */}
@@ -1259,6 +1868,20 @@ export default function EmployeeDirectory({
                 </div>
 
                 <div className="flex gap-3 justify-end border-t border-slate-100 pt-5 mt-2">
+                  {isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportingEmployee(editingEmployee);
+                        setReportValue("");
+                        setShowReportModal(true);
+                      }}
+                      className="px-4 py-2 bg-rose-650 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <AlertTriangle className="w-4 h-4" />
+                      {language === "ku" ? "ناردنی ڕاپۆرت" : "Send Report"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
@@ -1440,6 +2063,206 @@ export default function EmployeeDirectory({
         </div>
       )}
 
+      {showPDFConfigModal && isSuperAdmin && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in" id="pdf-configurer-modal">
+          <div className="bg-white/95 backdrop-blur-xl border border-white/90 shadow-2xl rounded-[36px] w-full max-w-5xl h-[90vh] overflow-hidden flex flex-col scale-in">
+            {/* Header */}
+            <div className="p-6 border-b border-rose-100/10 flex items-center justify-between bg-slate-50/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 text-red-650 flex items-center justify-center">
+                  <Printer className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-display font-black text-slate-800">
+                    {language === "ku" ? "کۆنتڕۆڵ و دیزاینکردنی فایلی چاپکراوی A4" : "Custom A4 Printing Layout & Design"}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                    {language === "ku"
+                      ? "پێش چاپکردن چڕی کارمەندان و شێوازی دەرکەوتنی زانیاڕییەکان ساز بکە"
+                      : "Control and design how employee profiles sit dynamically within the A4 dimensions before printing."}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPDFConfigModal(false)}
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition animate-hover-wave cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 overflow-y-auto flex-1">
+              {/* Controls Column */}
+              <div className="lg:col-span-5 p-6 border-b lg:border-b-0 lg:border-r border-slate-100 space-y-6 overflow-y-auto">
+                {/* 1. Grid Density Selector */}
+                <div>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-550 mb-3">
+                    {language === "ku" ? "چڕی لاپەڕە (کارمەند کە لەسەر زمانەیەکی A4 دەبێت)" : "Layout Density (Employees Per A4)"}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {[
+                      { id: "1", labelKu: "١ کارمەند / فۆرمی گەورە", labelEn: "1 Employee (Full Dossier)", infoKu: "دۆسیەی زانیاری هەمەلایەنە بە تەواوی زانیاریەکان", infoEn: "Complete personnel file" },
+                      { id: "2", labelKu: "٢ کارمەند / لاپەڕە", labelEn: "2 Employees / A4 Sheet", infoKu: "دۆسیەی بچووککراوەی نیو لاپەڕە", infoEn: "Compact dual layouts" },
+                      { id: "4", labelKu: "٤ کارمەند / لاپەڕە", labelEn: "4 Employees / A4 Sheet", infoKu: "کارتی پشکنین و هەڵسەنگاندن", infoEn: "Quarter badge grid" },
+                      { id: "9", labelKu: "٩ کارمەند / هێمای مۆڵەت", labelEn: "9 Employees / A4 Sheet", infoKu: "کارتی ناسنامەی بچووکی نۆخانەیی", infoEn: "ID labels matrix" }
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setPdfConfig(prev => ({ ...prev, density: opt.id as "1" | "2" | "4" | "9" }))}
+                        className={`p-3 rounded-xl border text-right lg:text-left transition-all ${
+                          pdfConfig.density === opt.id
+                            ? "bg-red-50 border-red-500 text-red-950 shadow-sm"
+                            : "bg-white border-slate-200/60 hover:border-slate-350 text-slate-600"
+                        }`}
+                      >
+                        <div className="font-extrabold text-xs block truncate">
+                          {language === "ku" ? opt.labelKu : opt.labelEn}
+                        </div>
+                        <span className="text-[9px] text-slate-400 font-bold block leading-snug mt-1 max-w-[200px] overflow-hidden text-ellipsis">
+                          {language === "ku" ? opt.infoKu : opt.infoEn}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Visual Layer Toggles */}
+                <div>
+                  <label className="block text-[11px] font-black uppercase tracking-wider text-slate-550 mb-3">
+                    {language === "ku" ? "دەستکاری زانیاری دەرکەوتوو" : "Visible Layer Controls"}
+                  </label>
+                  <div className="space-y-2 bg-slate-50/50 border border-slate-100 p-3 rounded-2xl">
+                    {[
+                      { key: "showPhoto", labelKu: "وێنەی فەرمی کارمەند", labelEn: "Employee Photo" },
+                      { key: "showCorporateHeader", labelKu: "سەردێڕ و لۆگۆی کۆمپانیا", labelEn: "Company Branding Header" },
+                      { key: "showPersonalDetails", labelKu: "زانیارییە کەسییەکان", labelEn: "Personal Profile Details" },
+                      { key: "showContactPhone", labelKu: "مۆدێلی ژمارەی مۆبایلی فەرمی", labelEn: "Primary Contact Phone" },
+                      { key: "showEmergencyContact", labelKu: "کەسی فریاکەوتنى خێرا", labelEn: "Emergency Contact Numbers" },
+                      { key: "showResidence", labelKu: "ناونیشانی نیشتەجێبوون", labelEn: "Residence Address" },
+                      { key: "showStampArea", labelKu: "شوێنی مۆر و واژۆ", labelEn: "Authorized HR Stamp Line" }
+                    ].map((item) => {
+                      const enabled = (pdfConfig as any)[item.key];
+                      return (
+                        <div
+                          key={item.key}
+                          onClick={() => setPdfConfig(prev => ({ ...prev, [item.key]: !enabled }))}
+                          className="flex items-center justify-between p-2.5 bg-white border border-slate-200/50 hover:bg-slate-50 rounded-xl transition cursor-pointer select-none"
+                        >
+                          <span className="text-xs font-extrabold text-slate-700">
+                            {language === "ku" ? item.labelKu : item.labelEn}
+                          </span>
+                          <div className={`w-9 h-5 rounded-full flex items-center p-0.5 transition-colors ${enabled ? 'bg-red-600 justify-end' : 'bg-slate-200 justify-start'}`}>
+                            <div className="w-4 h-4 rounded-full bg-white shadow-xs" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Info Note */}
+                <div className="p-3 bg-amber-500/10 border border-amber-500/15 rounded-xl flex gap-3 text-amber-900 text-[10px] font-bold leading-relaxed">
+                  <Info className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                  <div>
+                    {language === "ku" 
+                      ? "ڕێژەی چاپی کۆتایی بەپێی قیاسی A4 دیزاین کراوە و لەکاتی ناردن بە تەواوی لەگەڵ کۆنترۆڵی چاپکەری ویندۆز ڕێک دەکەوێت."
+                      : "Page margins, styles and headers auto-harmonize with A4 dimensions during native printer setup."}
+                  </div>
+                </div>
+              </div>
+
+              {/* Preview Column */}
+              <div className="lg:col-span-7 bg-slate-100 p-6 flex flex-col items-center justify-center relative overflow-y-auto max-h-[66vh] lg:max-h-full">
+                <div className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-1.5 self-start">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  {language === "ku" ? "پێشبینی ڕوکاری لاپەڕەی یەکەم" : "A4 Sheet Page 1 Live Preview"}
+                </div>
+
+                {/* Simulated A4 Container */}
+                <div className="w-full max-w-[420px] aspect-[1/1.414] bg-white border border-slate-200 shadow-2xl p-4 flex flex-col justify-between overflow-hidden relative" style={{ size: "A4" }}>
+                  <div className="absolute top-0 right-0 w-32 h-32 rounded-full filter blur-3xl opacity-10 pointer-events-none bg-slate-900" />
+                  
+                  {/* Cards inside simulating the page-layout */}
+                  <div 
+                    className="w-full h-full"
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: pdfConfig.density === "1" ? "1fr" 
+                                         : pdfConfig.density === "2" ? "1fr" 
+                                         : pdfConfig.density === "4" ? "1fr 1fr" 
+                                         : "1fr 1fr 1fr",
+                      gridTemplateRows: pdfConfig.density === "1" ? "1fr"
+                                       : pdfConfig.density === "2" ? "1fr 1fr"
+                                       : pdfConfig.density === "4" ? "1fr 1fr"
+                                       : "1fr 1fr 1fr",
+                      gap: pdfConfig.density === "1" ? "0"
+                         : pdfConfig.density === "2" ? "0.75rem"
+                         : pdfConfig.density === "4" ? "0.5rem"
+                         : "0.25rem"
+                    }}
+                  >
+                    {(() => {
+                      const selectedEmployees = employees.filter((e) => selectedEmpIds.includes(e.id));
+                      const densityNum = parseInt(pdfConfig.density);
+                      // Fill previews with existing selections redundantly so layout density occupies fully
+                      const previewItems = Array.from({ length: densityNum }, (_, index) => {
+                        return selectedEmployees[index % selectedEmployees.length] || employees[0];
+                      });
+
+                      return previewItems.map((emp, i) => (
+                        <div key={i} className="h-full w-full overflow-hidden">
+                          {renderPrintCard(emp, pdfConfig.density, true)}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+
+                {/* Count Indicator */}
+                <span className="text-[11px] font-bold text-slate-500 mt-3 block text-center bg-white/65 px-3 py-1 rounded-full border border-slate-200">
+                  {language === "ku" 
+                    ? `کۆی گشتی فایلی کارمەندان: ${selectedEmpIds.length} دۆسیە • کارتی جیاکراو بەپێی چڕی`
+                    : `Total selected employees for queue: ${selectedEmpIds.length} profiles`}
+                </span>
+              </div>
+            </div>
+
+            {/* Footer with actions */}
+            <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex flex-wrap gap-3 justify-between items-center">
+              <div className="text-xs font-bold text-slate-500">
+                {language === "ku" 
+                  ? `چاپکردن بەپێی ${pdfConfig.density} کارمەند لە یەک لاپەڕەدا`
+                  : `Formatted as ${pdfConfig.density} profile(s) per single printed A4 page.`}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPDFConfigModal(false)}
+                  className="px-4 py-2 hover:bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold rounded-xl transition cursor-pointer"
+                >
+                  {language === "ku" ? "پاشگەزبوونەوە" : "Cancel"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPDFConfigModal(false);
+                    setTimeout(() => {
+                      window.print();
+                    }, 250);
+                  }}
+                  className="px-5 py-2 bg-red-650 hover:bg-red-700 text-white text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition shadow-lg shadow-red-500/10 cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  {language === "ku" ? "دەستپێکردنی چاپکردنی فەرمی" : "Execute Document Printing"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 3. Gorgeous Printing Overlay for Selected Employees */}
       {isSuperAdmin && (
         <div id="print-section" className="hidden print:block w-full text-slate-800">
@@ -1469,262 +2292,155 @@ export default function EmployeeDirectory({
               }
               @page {
                 size: A4 portrait;
-                margin: 12mm 15mm;
+                margin: 0 !important;
               }
             }
           `}} />
           
-          {employees.filter((e) => selectedEmpIds.includes(e.id)).map((emp, index, arr) => {
-            const biz = BUSINESSES[emp.business];
-            const isMarried = emp.maritalStatus === "married";
-            
-            let themeHex = "#f59e0b"; // amber-500
-            let themeBg = "bg-amber-500/[0.04]";
-            let themeText = "text-amber-800";
-            let themeBorder = "border-amber-500/20";
-            
-            const empBiz = emp.business === "linia" ? "linia_karge" : emp.business;
-            if (empBiz.startsWith("linia")) {
-              themeHex = "#f59e0b";
-              themeBg = "bg-amber-500/[0.04]";
-              themeText = "text-amber-800";
-              themeBorder = "border-amber-500/20";
-            } else if (empBiz === "massimo") {
-              themeHex = "#6366f1";
-              themeBg = "bg-indigo-500/[0.04]";
-              themeText = "text-indigo-800";
-              themeBorder = "border-indigo-500/20";
-            } else if (empBiz === "liston") {
-              themeHex = "#10b981";
-              themeBg = "bg-emerald-500/[0.04]";
-              themeText = "text-emerald-800";
-              themeBorder = "border-emerald-500/20";
-            }
+          {(() => {
+            const selectedEmployees = employees.filter((e) => selectedEmpIds.includes(e.id));
+            const densityNum = parseInt(pdfConfig.density);
+            const finalChunks = chunkArray(selectedEmployees, densityNum);
 
-            return (
-              <div 
-                key={emp.id} 
-                className="print-card min-h-[265mm] flex flex-col justify-between p-8 bg-white border border-slate-200 rounded-[36px] relative overflow-hidden mb-8"
-                style={{ 
-                  pageBreakAfter: index < arr.length - 1 ? "always" : "auto",
-                  WebkitPrintColorAdjust: "exact",
-                  printColorAdjust: "exact"
-                }}
-              >
-                {/* Decorative Visual Accents */}
-                <div className={`absolute top-0 right-0 w-64 h-64 rounded-full filter blur-3xl opacity-20 pointer-events-none ${themeBg}`} />
-                <div className="absolute top-0 left-0 w-full h-[6px]" style={{ backgroundColor: themeHex }} />
-
-                <div>
-                  {/* Top Header Branding Row */}
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-5 mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center">
-                        <Shield className="w-6 h-6 text-slate-800" />
-                      </div>
-                      <div className="text-left">
-                        <h2 className="text-xs font-black text-slate-900 tracking-wider uppercase font-sans">
-                          {language === "ku" ? "کۆمەڵەی لێنیا و هاوبەشەکانی" : "LENYA & AFFILIATES GROUP"}
-                        </h2>
-                        <span className="text-[9px] font-bold text-slate-400 font-sans tracking-wide">
-                          {language === "ku" ? "سیستەمی فەرمی ناوەندی سەرچاوە مرۆییەکان" : "Unified Corporate HR Management Dossier"}
-                        </span>
-                      </div>
+            return finalChunks.map((chunk, chunkIndex) => {
+              return (
+                <div 
+                  key={chunkIndex}
+                  className="print-page w-[210mm] h-[297mm] max-h-[297mm] overflow-hidden bg-white relative p-6 mb-8"
+                  style={{
+                    pageBreakAfter: chunkIndex < finalChunks.length - 1 ? "always" : "avoid",
+                    boxSizing: "border-box",
+                    display: "grid",
+                    gridTemplateColumns: pdfConfig.density === "1" ? "1fr" 
+                                       : pdfConfig.density === "2" ? "1fr" 
+                                       : pdfConfig.density === "4" ? "1fr 1fr" 
+                                       : "1fr 1fr 1fr",
+                    gridTemplateRows: pdfConfig.density === "1" ? "1fr"
+                                     : pdfConfig.density === "2" ? "1fr 1fr"
+                                     : pdfConfig.density === "4" ? "1fr 1fr"
+                                     : "1fr 1fr 1fr",
+                    gap: pdfConfig.density === "1" ? "0"
+                       : pdfConfig.density === "2" ? "1.5rem"
+                       : pdfConfig.density === "4" ? "1rem"
+                       : "0.75rem"
+                  }}
+                >
+                  {chunk.map((emp) => (
+                    <div key={emp.id} className="h-full w-full overflow-hidden">
+                      {renderPrintCard(emp, pdfConfig.density, false)}
                     </div>
-                    <div className="text-right">
-                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 font-sans">
-                        {language === "ku" ? "کۆدی دۆسیە" : "DOSSIER REF ID"}
-                      </div>
-                      <div className="text-xs font-black text-slate-800 font-sans tracking-wider">
-                        #HR-{emp.id.substring(0, 7).toUpperCase()}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Main Title Banner */}
-                  <div className="text-center mb-6 relative">
-                    <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                      <div className="w-full border-t border-slate-100"></div>
-                    </div>
-                    <div className="relative flex justify-center">
-                      <span className="px-5 py-1.5 bg-slate-50 border border-slate-100 rounded-full text-[10px] font-black tracking-widest text-slate-500 font-display">
-                        {language === "ku" ? "دۆسیەی فەرمی زانیاری کارمەند" : "OFFICIAL EMPLOYEE DOSSIER"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Profile Layout Grid: Photo right */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-8 mb-6 items-center bg-slate-50/50 border border-slate-100 p-6 rounded-[28px]">
-                    <div className="col-span-4 flex justify-center">
-                      {emp.photoUrl ? (
-                        <div className="relative p-1 bg-white border border-slate-200 shadow-sm rounded-full">
-                          <img 
-                            src={emp.photoUrl} 
-                            alt={emp.name} 
-                            className="w-32 h-32 rounded-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-32 h-32 rounded-full bg-slate-100 flex items-center justify-center border border-dashed border-slate-300 text-slate-400">
-                          <User className="w-12 h-12" />
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="col-span-8 space-y-3 text-right md:text-left">
-                      <div>
-                        <h1 className="text-xl font-black text-slate-900 tracking-tight font-display mb-1">{emp.name}</h1>
-                        <p className="text-xs font-bold text-slate-500 font-sans uppercase tracking-wider">{emp.role}</p>
-                      </div>
-
-                      {/* Info badges */}
-                      <div className="flex flex-wrap items-center gap-2 justify-end md:justify-start">
-                        <span className={`text-[9px] font-black uppercase tracking-wider leading-none px-3 py-1 rounded-full border shadow-[0_1px_2px_rgba(0,0,0,0.02)] ${themeBg} ${themeText} ${themeBorder}`}>
-                          {biz ? (language === "ku" ? biz.nameKu : biz.nameEn) : emp.business}
-                        </span>
-                        <span className={`text-[9px] font-black uppercase tracking-wider leading-none px-3 py-1 rounded-full border shadow-[0_1px_2px_rgba(0,0,0,0.02)] bg-slate-100 text-slate-600 border-slate-200`}>
-                          {emp.status === "active" ? (language === "ku" ? "چالاک" : "Active") : emp.status === "suspended" ? (language === "ku" ? "ڕاگیراو" : "Suspended") : (language === "ku" ? "خانەنشین" : "Retired")}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4 text-xs pt-2.5 border-t border-slate-100/80">
-                        <div>
-                          <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest mb-0.5">{language === "ku" ? "بزنس / پیشەی دیاریکراو" : "Focus Sector Branch"}</div>
-                          <div className="font-extrabold text-slate-700">{biz ? (language === "ku" ? biz.typeKu : biz.typeEn) : "-"}</div>
-                        </div>
-                        <div>
-                          <div className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest mb-0.5">{language === "ku" ? "ڕێکەوتی دامەزراندن" : "Onboarding Date"}</div>
-                          <div className="font-extrabold text-slate-700 font-sans">{emp.hireDate || "-"}</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Informational Blocks: Personal Details & Contact Details */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Block A: General Personnel profile */}
-                    <div className="border border-slate-150 p-6 rounded-[28px] bg-white shadow-xs">
-                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
-                        <Award className="w-4 h-4 text-amber-500" />
-                        {language === "ku" ? "زانیاری کەسیی سەرەکی" : "Core Personal Profile"}
-                      </h3>
-                      
-                      <div className="space-y-3 text-xs font-semibold">
-                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
-                          <span className="text-slate-400">{language === "ku" ? "ڕێکەوتی لەدایکبوون" : "Birth Date"}</span>
-                          <span className="text-slate-800 font-sans">{emp.birthDate || "-"}</span>
-                        </div>
-                        
-                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
-                          <span className="text-slate-400">{language === "ku" ? "بارودۆخی خێزانی" : "Marital Status"}</span>
-                          <span className="text-slate-800">
-                            {emp.maritalStatus === "married" ? (language === "ku" ? "هاوسەرگیریکردوو 💍" : "Married 💍") : (language === "ku" ? "سەڵت 👤" : "Single 👤")}
-                          </span>
-                        </div>
-
-                        {isMarried && emp.marriageAnniversary && (
-                          <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50 bg-amber-500/[0.03] px-2.5 rounded-lg border border-amber-500/10">
-                            <span className="text-amber-800 font-extrabold">{language === "ku" ? "ڕۆژی هاوسەرگیری" : "Marriage Anniversary"}</span>
-                            <span className="text-amber-900 font-sans font-bold">{emp.marriageAnniversary}</span>
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
-                          <span className="text-slate-400">{language === "ku" ? "ڕەگەزنامە" : "Citizenship"}</span>
-                          <span className="text-slate-800">{emp.citizenship || "-"}</span>
-                        </div>
-
-                        <div className="flex items-center justify-between py-1.5">
-                          <span className="text-slate-400">{language === "ku" ? "نەتەوە" : "Ethnicity"}</span>
-                          <span className="text-slate-800">{emp.ethnicity || "-"}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Block B: Contact Detail Records */}
-                    <div className="border border-slate-150 p-6 rounded-[28px] bg-white shadow-xs">
-                      <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2 mb-4 flex items-center gap-2">
-                        <Phone className="w-4 h-4 text-emerald-500" />
-                        {language === "ku" ? "پەیوەندی و ناونیشان" : "Contact & Geography"}
-                      </h3>
-                      
-                      <div className="space-y-3 text-xs font-semibold">
-                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
-                          <span className="text-slate-400">{language === "ku" ? "ژمارەی مۆبایل" : "Phone Number"}</span>
-                          <span className="text-slate-800 font-sans tracking-wide">{emp.phone || "-"}</span>
-                        </div>
-
-                        <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
-                          <span className="text-slate-400">{language === "ku" ? "کەسی نزیک (فریاکەوتن)" : "Emergency Contact"}</span>
-                          <span className="text-slate-800 font-sans">{emp.emergencyContactPhone || "-"}</span>
-                        </div>
-
-                        {emp.emergencyContactRelation && (
-                          <div className="flex items-center justify-between py-1.5 border-b border-slate-100/50">
-                            <span className="text-slate-400">{language === "ku" ? "پەیوەندی کەسی نزیک" : "Emergency Relation"}</span>
-                            <span className="text-slate-800">{emp.emergencyContactRelation}</span>
-                          </div>
-                        )}
-
-                        <div className="flex items-start justify-between py-1.5">
-                          <span className="text-slate-400 shrink-0">{language === "ku" ? "ناونیشانی نیشتەجێبوون" : "Residence Address"}</span>
-                          <span className="text-slate-800 text-left md:text-right max-w-[180px] leading-tight font-medium bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
-                            {emp.residenceAddress || "-"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  ))}
                 </div>
+              );
+            });
+          })()}
+        </div>
+      )}
 
-                {/* Footer and Corporate Validation Elements */}
-                <div className="border-t border-slate-100 pt-6 mt-6 flex flex-col md:flex-row items-center justify-between gap-6">
-                  {/* Digital Signature Security Row */}
-                  <div className="flex items-center gap-3 bg-slate-50 border border-slate-100 p-2.5 rounded-2xl">
-                    <svg className="w-10 h-10 text-slate-700 shrink-0 border border-slate-200 p-1 bg-white rounded-lg" viewBox="0 0 100 100" fill="currentColor">
-                      <rect x="10" y="10" width="20" height="20" />
-                      <rect x="70" y="10" width="20" height="20" />
-                      <rect x="10" y="70" width="20" height="20" />
-                      <rect x="35" y="35" width="30" height="30" />
-                      <rect x="40" y="10" width="10" height="15" />
-                      <rect x="10" y="40" width="15" height="10" />
-                      <rect x="80" y="40" width="10" height="20" />
-                      <rect x="40" y="80" width="25" height="10" />
-                    </svg>
-                    <div className="text-[8px] font-bold text-slate-500 leading-snug font-sans max-w-[220px]">
-                      {language === "ku" ? (
-                        <>
-                          ئەم زانیارییە پارێزراوە لە ڕێگەی لۆگی ناوەندی.
-                          <br />
-                          <span className="text-slate-400">ڕێکەوتی چاپکردن: {new Date().toLocaleDateString('ku-IQ')} • بە فەرمی چالاکە</span>
-                        </>
-                      ) : (
-                        <>
-                          This record is generated securely from validated HR archives.
-                          <br />
-                          <span className="text-slate-400">Printed: {new Date().toLocaleDateString('en-US')} • Authentic Document</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Stamp space */}
-                  <div className="text-center md:text-right">
-                    <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                      {language === "ku" ? "بەشی سەرچاوە مرۆییەکان / مۆر و واژۆ" : "AUTHORIZED HR STAMP & SIGNATURE"}
-                    </div>
-                    <div className="inline-block w-36 border-b border-dashed border-slate-300 h-5"></div>
-                  </div>
+      {showReportModal && reportingEmployee && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 z-[60] animate-fade-in" id="report-incorrect-modal">
+          <div className="bg-white/95 backdrop-blur-xl border border-white/90 shadow-2xl rounded-[36px] w-full max-w-lg overflow-hidden flex flex-col scale-in">
+            {/* Header */}
+            <div className="p-6 border-b border-rose-100/10 flex items-center justify-between bg-slate-50/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-650 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-display font-black text-slate-800">
+                    {language === "ku" ? "ناردنی ڕاپۆرتی زانیاری هەڵە" : "Report Incorrect Information"}
+                  </h3>
+                  <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                    {language === "ku"
+                      ? `ڕاپۆرت بنێرە بۆ پاڵپشتیکردنی زانیاری دروستی کارمەند: ${reportingEmployee.name}`
+                      : `Send report to super admin to correct details for: ${reportingEmployee.name}`}
+                  </p>
                 </div>
               </div>
-            );
-          })}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReportModal(false);
+                  setReportingEmployee(null);
+                  setReportValue("");
+                }}
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                {language === "ku"
+                  ? "تکایە لێرەدا بنووسە چ زانیارییەک هەڵەیە و چی نوێ بکرێتەوە:"
+                  : "Please detail what information is incorrect and how it should be updated:"}
+              </label>
+              <textarea
+                value={reportValue}
+                onChange={(e) => setReportValue(e.target.value)}
+                rows={4}
+                className="w-full p-3 bg-white border border-slate-200 rounded-2xl focus:ring-1 focus:ring-amber-500 font-sans text-xs"
+                placeholder={
+                  language === "ku"
+                    ? "بۆ نموونە: ژمارەی تەلەفۆنەکەی یان ناونیشانەکەی هەڵەیە و پێویستە بکرێت بە..."
+                    : "e.g., Phone number or residence address is wrong, should be..."
+                }
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReportModal(false);
+                  setReportingEmployee(null);
+                  setReportValue("");
+                }}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition cursor-pointer"
+              >
+                {language === "ku" ? "پاشگەزبوونەوە" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!reportValue.trim()) return;
+                  
+                  await onUpdateEmployee(reportingEmployee.id, {
+                    reportText: reportValue,
+                    reportStatus: "pending",
+                    reportUser: userSession?.name || userSession?.username || "Admin",
+                    reportCreatedAt: new Date().toISOString()
+                  });
+                  
+                  setShowReportModal(false);
+                  setReportingEmployee(null);
+                  setReportValue("");
+                  setShowAddModal(false);
+                }}
+                disabled={!reportValue.trim()}
+                className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition shadow-lg shadow-amber-500/10 cursor-pointer"
+              >
+                <CheckCircle className="w-4 h-4" />
+                {language === "ku" ? "ناردنی ڕاپۆرت" : "Send Report"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
     </div>
   );
+}
+
+function chunkArray<T>(array: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
 }
 
 function SmileIcon() {

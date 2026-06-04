@@ -22,6 +22,9 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel, language }: I
   // Load image
   useEffect(() => {
     const img = new Image();
+    if (imageSrc && (imageSrc.startsWith("http://") || imageSrc.startsWith("https://"))) {
+      img.crossOrigin = "anonymous";
+    }
     img.src = imageSrc;
     img.onload = () => {
       setImage(img);

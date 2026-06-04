@@ -105,6 +105,10 @@ export interface Employee {
   citizenship?: string; // ڕەگەزنامە (عیراقی، ئێرانی، هیندستانی...)
   residenceAddress?: string; // ناونیشانی نیشتەجێبوون (بۆ نموونە: هەولێر - گەڕەکی نەورۆز)
   createdBy?: string; // Username of creator
+  reportText?: string; // Detail about incorrect info reported by admin
+  reportStatus?: "pending" | "resolved"; // Status of the report
+  reportUser?: string; // Who sent the report
+  reportCreatedAt?: string; // Timestamp when it was reported
 }
 
 export interface AppUser {
