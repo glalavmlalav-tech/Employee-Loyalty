@@ -127,7 +127,7 @@ interface EmployeeDirectoryProps {
   onUpdateEmployee: (id: string, emp: Partial<Employee>) => Promise<void>;
   onDeleteEmployee: (id: string) => Promise<void>;
   language: "ku" | "en";
-  userSession?: { username: string; role: "super_admin" | "admin"; business: BusinessId | "all"; name: string } | null;
+  userSession?: { username: string; role: "super_admin" | "admin" | "observer"; business: BusinessId | "all"; name: string } | null;
 }
 
 export default function EmployeeDirectory({
@@ -1158,13 +1158,15 @@ export default function EmployeeDirectory({
             </button>
           )}
 
-          <button
-            onClick={handleOpenAdd}
-            className="px-4 py-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-950 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md hover:scale-102 transition duration-200 cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            {t.addEmployee}
-          </button>
+          {userSession?.role !== "observer" && (
+            <button
+              onClick={handleOpenAdd}
+              className="px-4 py-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-950 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md hover:scale-102 transition duration-200 cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              {t.addEmployee}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1419,9 +1421,9 @@ export default function EmployeeDirectory({
                     <button
                       onClick={() => handleOpenEdit(emp)}
                       className="transition active:scale-95"
-                      title={userSession?.role === "admin" ? (language === "ku" ? "بینینی زانیاری" : "View Details") : (language === "ku" ? "دەستکاریکردنی فۆرم" : "Edit Profile")}
+                      title={(userSession?.role === "admin" || userSession?.role === "observer") ? (language === "ku" ? "بینینی زانیاری" : "View Details") : (language === "ku" ? "دەستکاریکردنی فۆرم" : "Edit Profile")}
                     >
-                      {userSession?.role === "admin" ? (
+                      {(userSession?.role === "admin" || userSession?.role === "observer") ? (
                         <span className="text-xs px-3 py-1.5 text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl font-bold flex items-center gap-1.5 border border-slate-200 transition">
                           <Info className="w-3.5 h-3.5 text-indigo-600" />
                           {language === "ku" ? "بینینی زانیاری" : "View Details"}
@@ -1433,7 +1435,7 @@ export default function EmployeeDirectory({
                         </span>
                       )}
                     </button>
-                    {userSession?.role !== "admin" && (
+                    {userSession?.role !== "admin" && userSession?.role !== "observer" && (
                       <button
                         onClick={() => handleDelete(emp.id)}
                         className="px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-slate-200 hover:border-rose-100 rounded-xl font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm"
@@ -1453,7 +1455,7 @@ export default function EmployeeDirectory({
 
       {/* Add / Edit Profile Dialog Box */}
       {showAddModal && (() => {
-        const isReadOnly = !!(userSession?.role === "admin" && editingEmployee);
+        const isReadOnly = !!((userSession?.role === "admin" || userSession?.role === "observer") && editingEmployee);
         return (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/45 backdrop-blur-md flex items-center justify-center p-2 sm:p-4">
             <div className="bg-white/95 backdrop-blur-xl rounded-[28px] sm:rounded-[36px] max-w-lg w-full max-h-[calc(100vh-2rem)] sm:max-h-[85vh] border border-white shadow-2xl flex flex-col overflow-hidden animate-fade-in">
@@ -1461,7 +1463,7 @@ export default function EmployeeDirectory({
                 <h3 className="font-display font-black text-base sm:text-lg flex items-center gap-2">
                   <SmileIcon />
                   {editingEmployee 
-                    ? (userSession?.role === "admin" 
+                    ? ((userSession?.role === "admin" || userSession?.role === "observer") 
                       ? (language === "ku" ? "بینینی زانیاری کارمەند" : "View Employee Profile") 
                       : t.editEmployee) 
                     : t.addEmployee}
@@ -1690,7 +1692,7 @@ export default function EmployeeDirectory({
                     <select
                       className="w-full p-2.5 bg-white/70 border border-white border-b-slate-200 rounded-xl focus:ring-1 focus:ring-amber-500 text-xs font-sans disabled:opacity-75"
                       value={formData.business}
-                      disabled={isReadOnly || userSession?.role === "admin"}
+                      disabled={isReadOnly || userSession?.role === "admin" || userSession?.role === "observer"}
                       onChange={(e) => setFormData({ ...formData, business: e.target.value as BusinessId })}
                     >
                       {(Object.keys(BUSINESSES) as BusinessId[]).filter(id => id !== "linia").map((id) => (
@@ -1868,7 +1870,7 @@ export default function EmployeeDirectory({
                 </div>
 
                 <div className="flex gap-3 justify-end border-t border-slate-100 pt-5 mt-2">
-                  {isReadOnly && (
+                  {isReadOnly && userSession?.role !== "observer" && (
                     <button
                       type="button"
                       onClick={() => {

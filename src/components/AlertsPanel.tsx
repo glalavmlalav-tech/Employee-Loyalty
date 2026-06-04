@@ -53,6 +53,7 @@ interface AlertsPanelProps {
   onTriggerWhatsApp: (employee: Employee, eventType: "birthday" | "marriage_anniversary" | "work_anniversary") => void;
   language: "ku" | "en";
   systemDate?: string;
+  userSession?: { role: string } | null;
 }
 
 export default function AlertsPanel({
@@ -63,7 +64,8 @@ export default function AlertsPanel({
   onAddGiftIdea,
   onTriggerWhatsApp,
   language,
-  systemDate
+  systemDate,
+  userSession
 }: AlertsPanelProps) {
   const [editingGiftId, setEditingGiftId] = useState<string | null>(null);
   const [giftInput, setGiftInput] = useState<string>("");
@@ -418,22 +420,28 @@ export default function AlertsPanel({
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <button
-                          onClick={() => {
-                            setSelectedAlertForGift(alert);
-                            // Suggest a default gift based on type
-                            setNewGiftIdea(alert.type === "birthday" 
-                              ? (language === "ku" ? "کارتێکی پیرۆزبایی کۆمپانیا + کتێبێکی ناوازە یان کاتژمێر" : "Company birthday card + Premium branded watch or book")
-                              : alert.type === "marriage_anniversary"
-                                ? (language === "ku" ? "کەبۆنەیەکی شیرینی خێزانی یان باوچەر بۆ دوو پیتزا گەرمە" : "Kurdish sweet box + Dinner voucher for two")
-                                : (language === "ku" ? "کارتێکی ڕێزلێنانی تایبەت بە ساڵیادی دامەزراندن + پاداشتی دارایی شایستە" : "Custom Work Anniversary Honor Card + Career milestone loyalty cash bonus")
-                            );
-                          }}
-                          className="flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold glass-btn-primary shadow-sm whitespace-nowrap cursor-pointer"
-                        >
-                          <Gift className="w-4 h-4 text-rose-300" />
-                          <span>{t.prepareGiftButton}</span>
-                        </button>
+                        {userSession?.role !== "observer" ? (
+                          <button
+                            onClick={() => {
+                              setSelectedAlertForGift(alert);
+                              // Suggest a default gift based on type
+                              setNewGiftIdea(alert.type === "birthday" 
+                                ? (language === "ku" ? "کارتێکی پیرۆزبایی کۆمپانیا + کتێبێکی ناوازە یان کاتژمێر" : "Company birthday card + Premium branded watch or book")
+                                : alert.type === "marriage_anniversary"
+                                  ? (language === "ku" ? "کەبۆنەیەکی شیرینی خێزانی یان باوچەر بۆ دوو پیتزا گەرمە" : "Kurdish sweet box + Dinner voucher for two")
+                                  : (language === "ku" ? "کارتێکی ڕێزلێنانی تایبەت بە ساڵیادی دامەزراندن + پاداشتی دارایی شایستە" : "Custom Work Anniversary Honor Card + Career milestone loyalty cash bonus")
+                              );
+                            }}
+                            className="flex items-center justify-center gap-1.5 py-2 px-3 text-[11px] font-bold glass-btn-primary shadow-sm whitespace-nowrap cursor-pointer"
+                          >
+                            <Gift className="w-4 h-4 text-rose-300" />
+                            <span>{t.prepareGiftButton}</span>
+                          </button>
+                        ) : (
+                          <div className="flex items-center justify-center text-[10px] text-slate-400 font-bold bg-white/40 border border-slate-100 rounded-xl px-3 py-1.5 select-none shrink-0 leading-none">
+                            🔒 {language === "ku" ? "بینین بە بێ دەستکاری" : "Read-only View"}
+                          </div>
+                        )}
 
                         {(() => {
                           const emp = employees.find((e) => e.id === alert.employeeId);
@@ -551,34 +559,42 @@ export default function AlertsPanel({
                         </td>
                         <td className="py-4 px-4 text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            {log.status === "pending" && (
-                              <button
-                                onClick={() => onUpdateGiftStatus(log.id, "prepared")}
-                                className="text-[10px] bg-sky-50 text-sky-700 border border-sky-100 px-2.5 py-1 rounded-lg hover:bg-sky-100 transition font-sans font-bold shadow-sm"
-                              >
-                                {language === "ku" ? "دیاریکردن بۆ ئامادەکراو" : "Set Prepared"}
-                              </button>
-                            )}
-                            {(log.status === "pending" || log.status === "prepared") && (
-                              <button
-                                onClick={() => onUpdateGiftStatus(log.id, "delivered")}
-                                className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-lg hover:bg-emerald-100 transition font-sans font-bold shadow-sm"
-                              >
-                                {language === "ku" ? "دیاریکردن بۆ بەخشراو" : "Set Delivered"}
-                              </button>
-                            )}
-                            {log.status !== "cancelled" && log.status !== "delivered" && (
-                              <button
-                                onClick={() => onUpdateGiftStatus(log.id, "cancelled")}
-                                className="text-[10px] bg-slate-100 border border-slate-100 text-slate-500 px-2.5 py-1 rounded-lg hover:bg-slate-200 transition font-sans font-bold"
-                              >
-                                {t.cancel}
-                              </button>
-                            )}
-                            {(log.status === "cancelled" || log.status === "delivered") && (
-                              <span className="text-[10px] text-slate-400 italic">
-                                <CheckCircle2 className="w-5 h-5 text-emerald-500 inline shadow-sm" />
+                            {userSession?.role === "observer" ? (
+                              <span className="text-[10px] text-slate-500 font-bold bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 select-none">
+                                {language === "ku" ? "چاودێر تەنها بینین" : "Observer Mode"}
                               </span>
+                            ) : (
+                              <>
+                                {log.status === "pending" && (
+                                  <button
+                                    onClick={() => onUpdateGiftStatus(log.id, "prepared")}
+                                    className="text-[10px] bg-sky-50 text-sky-700 border border-sky-100 px-2.5 py-1 rounded-lg hover:bg-sky-100 transition font-sans font-bold shadow-sm"
+                                  >
+                                    {language === "ku" ? "دیاریکردن بۆ ئامادەکراو" : "Set Prepared"}
+                                  </button>
+                                )}
+                                {(log.status === "pending" || log.status === "prepared") && (
+                                  <button
+                                    onClick={() => onUpdateGiftStatus(log.id, "delivered")}
+                                    className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-lg hover:bg-emerald-100 transition font-sans font-bold shadow-sm"
+                                  >
+                                    {language === "ku" ? "دیاریکردن بۆ بەخشراو" : "Set Delivered"}
+                                  </button>
+                                )}
+                                {log.status !== "cancelled" && log.status !== "delivered" && (
+                                  <button
+                                    onClick={() => onUpdateGiftStatus(log.id, "cancelled")}
+                                    className="text-[10px] bg-slate-100 border border-slate-100 text-slate-500 px-2.5 py-1 rounded-lg hover:bg-slate-200 transition font-sans font-bold"
+                                  >
+                                    {t.cancel}
+                                  </button>
+                                )}
+                                {(log.status === "cancelled" || log.status === "delivered") && (
+                                  <span className="text-[10px] text-slate-400 italic">
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-500 inline shadow-sm" />
+                                  </span>
+                                )}
+                              </>
                             )}
                           </div>
                         </td>
@@ -637,37 +653,43 @@ export default function AlertsPanel({
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-200/50">
-                      {log.status === "pending" && (
-                        <button
-                          onClick={() => onUpdateGiftStatus(log.id, "prepared")}
-                          className="text-[10px] bg-sky-50 text-sky-700 border border-sky-100 px-3 py-1.5 rounded-xl hover:bg-sky-100 transition font-sans font-bold shadow-sm cursor-pointer"
-                        >
-                          {language === "ku" ? "دیاریکردن بۆ ئامادەکراو" : "Set Prepared"}
-                        </button>
-                      )}
-                      {(log.status === "pending" || log.status === "prepared") && (
-                        <button
-                          onClick={() => onUpdateGiftStatus(log.id, "delivered")}
-                          className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1.5 rounded-xl hover:bg-emerald-100 transition font-sans font-bold shadow-sm cursor-pointer"
-                        >
-                          {language === "ku" ? "دیاریکردن بۆ بەخشراو" : "Set Delivered"}
-                        </button>
-                      )}
-                      {log.status !== "cancelled" && log.status !== "delivered" && (
-                        <button
-                          onClick={() => onUpdateGiftStatus(log.id, "cancelled")}
-                          className="text-[10px] bg-slate-100 border border-slate-100 text-slate-500 px-3 py-1.5 rounded-xl hover:bg-slate-200 transition font-sans font-bold cursor-pointer"
-                        >
-                          {t.cancel}
-                        </button>
-                      )}
-                      {(log.status === "cancelled" || log.status === "delivered") && (
-                        <span className="text-[10px] text-slate-400 italic">
-                          <CheckCircle2 className="w-5 h-5 text-emerald-500 inline shadow-sm" />
-                        </span>
-                      )}
-                    </div>
+                    {userSession?.role !== "observer" ? (
+                      <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-200/50">
+                        {log.status === "pending" && (
+                          <button
+                            onClick={() => onUpdateGiftStatus(log.id, "prepared")}
+                            className="text-[10px] bg-sky-50 text-sky-700 border border-sky-100 px-3 py-1.5 rounded-xl hover:bg-sky-100 transition font-sans font-bold shadow-sm cursor-pointer"
+                          >
+                            {language === "ku" ? "دیاریکردن بۆ ئامادەکراو" : "Set Prepared"}
+                          </button>
+                        )}
+                        {(log.status === "pending" || log.status === "prepared") && (
+                          <button
+                            onClick={() => onUpdateGiftStatus(log.id, "delivered")}
+                            className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1.5 rounded-xl hover:bg-emerald-100 transition font-sans font-bold shadow-sm cursor-pointer"
+                          >
+                            {language === "ku" ? "دیاریکردن بۆ بەخشراو" : "Set Delivered"}
+                          </button>
+                        )}
+                        {log.status !== "cancelled" && log.status !== "delivered" && (
+                          <button
+                            onClick={() => onUpdateGiftStatus(log.id, "cancelled")}
+                            className="text-[10px] bg-slate-100 border border-slate-100 text-slate-500 px-3 py-1.5 rounded-xl hover:bg-slate-200 transition font-sans font-bold cursor-pointer"
+                          >
+                            {t.cancel}
+                          </button>
+                        )}
+                        {(log.status === "cancelled" || log.status === "delivered") && (
+                          <span className="text-[10px] text-slate-400 italic">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-500 inline shadow-sm" />
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-[10px] text-center text-slate-500 bg-slate-50 border border-slate-100 p-2 rounded-xl mt-1 font-bold select-none">
+                        🔒 {language === "ku" ? "تەنها بینینی چاودێر" : "Observer Mode - Read Only"}
+                      </div>
+                    )}
                   </div>
                 );
               })}

@@ -843,8 +843,8 @@ export default function App() {
             <span className="flex-1 text-xs md:text-sm">{t.employeesTab}</span>
           </button>
 
-          {/* TAB 3: Planner (Hidden from showroom managers) */}
-          {userSession?.role !== "admin" && (
+          {/* TAB 3: Planner (Hidden from showroom managers and observers) */}
+          {userSession?.role !== "admin" && userSession?.role !== "observer" && (
             <button
               onClick={() => {
                 setActiveTab("planner");
@@ -912,7 +912,9 @@ export default function App() {
                 {userSession 
                   ? (userSession.role === "super_admin" 
                     ? (language === "ku" ? "بەڕێوەبەری سەرەکی" : "Super Admin") 
-                    : (language === "ku" ? `ڕێکخەری پێشانگا (${userSession.business})` : `Showroom Admin (${userSession.business.toUpperCase()})`))
+                    : userSession.role === "observer"
+                      ? (language === "ku" ? "خاوەن بزنس (چاودێر)" : "Business Owner (Observer)")
+                      : (language === "ku" ? `ڕێکخەری پێشانگا (${userSession.business})` : `Showroom Admin (${userSession.business.toUpperCase()})`))
                   : "Guest Developer"}
               </span>
               <span className="text-[9px] text-emerald-400 font-bold flex items-center gap-1 mt-0.5">
@@ -1250,6 +1252,7 @@ export default function App() {
                     onTriggerWhatsApp={triggerWhatsAppComposer}
                     language={language}
                     systemDate={systemDate}
+                    userSession={userSession}
                   />
                 )}
 

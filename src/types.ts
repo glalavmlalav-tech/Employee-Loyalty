@@ -117,7 +117,7 @@ export interface AppUser {
   email?: string; // Verified Google Email
   password?: string; // Optional/legacy for backward compatibility
   name: string;
-  role: "super_admin" | "admin";
+  role: "super_admin" | "admin" | "observer";
   business: BusinessId | "all";
   createdAt: string;
 }

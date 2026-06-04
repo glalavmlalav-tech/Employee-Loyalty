@@ -41,7 +41,7 @@ export default function SettingsPanel({
     username: "",
     password: "",
     name: "",
-    role: "admin" as "super_admin" | "admin",
+    role: "admin" as "super_admin" | "admin" | "observer",
     business: "massimo" as BusinessId | "all"
   });
 
@@ -64,6 +64,7 @@ export default function SettingsPanel({
     emptyUsers: language === "ku" ? "هیچ یوزەرێکی لاوەکی دروست نەکراوە." : "No secondary accounts registered yet.",
     roleSuperAdmin: language === "ku" ? "سوپەر ئەدمین (هەموو بەشەکان)" : "Super Admin (Full Access)",
     roleAdmin: language === "ku" ? "ئەدمینی لقی دیاریکراو (تەنها بەشی خۆی)" : "Showroom/Factory Admin (Restricted)",
+    roleObserver: language === "ku" ? "خاوەن بزنس/چاودێر (هەموو بەشەکان - تەنیا بینین)" : "Business Owner / Observer (All - View Only)",
     assignedAll: language === "ku" ? "سەرجەم لایەنەکان" : "All Businesses",
     creationDate: language === "ku" ? "ڕێکەوتی دروستکردن" : "Date Created"
   };
@@ -238,9 +239,16 @@ export default function SettingsPanel({
                       <span className={`px-2.5 py-1 text-[9px] font-extrabold rounded-lg border uppercase ${
                         user.role === "super_admin"
                           ? "bg-rose-500/10 text-rose-600 border-rose-200"
-                          : "bg-amber-500/10 text-amber-600 border-amber-200"
+                          : user.role === "observer"
+                            ? "bg-emerald-500/10 text-emerald-600 border-emerald-200"
+                            : "bg-amber-500/10 text-amber-600 border-amber-200"
                       }`}>
-                        {user.role === "super_admin" ? "Super Admin" : "Showroom Admin"}
+                        {user.role === "super_admin" 
+                          ? "Super Admin" 
+                          : user.role === "observer"
+                            ? (language === "ku" ? "چاودێر (خاوەن بزنس)" : "Observer")
+                            : "Showroom Admin"
+                        }
                       </span>
 
                       <div className="flex items-center gap-1.5">
@@ -386,16 +394,17 @@ export default function SettingsPanel({
                   className="w-full p-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 text-xs font-sans"
                   value={formData.role}
                   onChange={(e) => {
-                    const r = e.target.value as "super_admin" | "admin";
+                    const r = e.target.value as "super_admin" | "admin" | "observer";
                     setFormData({ 
                       ...formData, 
                       role: r,
-                      business: r === "super_admin" ? "all" : "massimo"
+                      business: (r === "super_admin" || r === "observer") ? "all" : "massimo"
                     });
                   }}
                 >
                   <option value="admin">{t.roleAdmin}</option>
                   <option value="super_admin">{t.roleSuperAdmin}</option>
+                  <option value="observer">{t.roleObserver}</option>
                 </select>
               </div>
 
