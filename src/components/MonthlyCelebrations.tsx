@@ -44,9 +44,10 @@ interface MonthlyCelebrationsProps {
   employees: Employee[];
   onTriggerWhatsApp: (employee: Employee, eventType: "birthday" | "marriage_anniversary" | "work_anniversary") => void;
   language: "ku" | "en";
+  systemDate?: string;
 }
 
-export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, language }: MonthlyCelebrationsProps) {
+export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, language, systemDate }: MonthlyCelebrationsProps) {
   // Translate labels
   const t = {
     title: language === "ku" ? "کۆنترۆڵی بۆنە مانگییەکان 📅" : "Monthly Celebrations & Milestones 📅",
@@ -94,9 +95,35 @@ export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, lang
     "July", "August", "September", "October", "November", "December"
   ];
 
-  // Default to month 5 (May - 0-indexed is 4)
-  const [selectedMonth, setSelectedMonth] = useState<number>(4);
+  // Dynamically default to the month of systemDate, or fallback to real-world current month
+  const getInitialMonth = () => {
+    if (systemDate) {
+      const parts = systemDate.split("-");
+      if (parts.length === 3) {
+        const m = parseInt(parts[1], 10);
+        if (m >= 1 && m <= 12) {
+          return m - 1;
+        }
+      }
+    }
+    return new Date().getMonth(); // 0-indexed
+  };
+
+  const [selectedMonth, setSelectedMonth] = useState<number>(getInitialMonth);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Sync selectedMonth if the systemDate changes
+  React.useEffect(() => {
+    if (systemDate) {
+      const parts = systemDate.split("-");
+      if (parts.length === 3) {
+        const m = parseInt(parts[1], 10);
+        if (m >= 1 && m <= 12) {
+          setSelectedMonth(m - 1);
+        }
+      }
+    }
+  }, [systemDate]);
 
   // Only consider active employees for celebrations
   const activeEmployees = employees.filter(emp => emp.status === "active");

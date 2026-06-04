@@ -136,10 +136,19 @@ const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
   }
 ];
 
+const getTodayDateString = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export default function App() {
   const [language, setLanguage] = useState<"ku" | "en">("ku");
   const [activeTab, setActiveTab] = useState<"alerts" | "employees" | "planner" | "months" | "settings">("alerts");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [systemDate, setSystemDate] = useState<string>(getTodayDateString);
   
   // Real-time states
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -379,11 +388,11 @@ export default function App() {
     };
   }, []);
 
-  // Recalculate alerts if employees update
+  // Recalculate alerts if employees update or system date changes
   useEffect(() => {
-    const currentAlerts = getActiveAlerts(employees, "2026-05-25");
+    const currentAlerts = getActiveAlerts(employees, systemDate);
     setAlerts(currentAlerts);
-  }, [employees]);
+  }, [employees, systemDate]);
 
   // Firestore operations
   const registerEmployeeInFirestore = async (empData: Omit<Employee, "id">) => {
@@ -626,7 +635,7 @@ export default function App() {
     plannerTab: language === "ku" ? "پێشنیاری مانگانەی ستاف 💡" : "Monthly suggestions 💡",
     monthsTab: language === "ku" ? "بۆنەی مانگەکان 📅" : "Monthly Celebrations 📅",
     activeStaffTitle: language === "ku" ? "کۆی گشتی کارمەندان" : "Total Corporate Staff",
-    activeWarnings: language === "ku" ? "بۆنەی بەپەلە (٢ ڕۆژی تر)" : "Milestone Alerts (48h)",
+    activeWarnings: language === "ku" ? "بۆنەی بەپەلە (٤٨ کاتژمێر پێش و دوای بۆنە)" : "Milestone Alerts (48h Buffer)",
     rewardPointsTotal: language === "ku" ? "مۆڕاڵ و دۆخی گشتی ستاف" : "General Staff Morale Status",
     multiDeviceLogo: language === "ku" ? "فایەربەیس هاوبەشکراو لەسەر چەندین ئامێر" : "Cloud Firebase Sync Enabled (Live updates across tabs)",
     demoWarning: language === "ku" ? "دۆسیەی کارمەندان بەتاڵە! دەتەوێت زانیاری کارمەندانی ڕاستەقینەی هەر سێ کۆمپانیاکە زیادبکەین کە لەگەڵ ڕێکەوتەکانی پیرۆزباییدا بگونجێت تا کارکردنی سیستەمەکە ببینی؟" : "Database looks empty! Would you like to initialize Kurdish employee portfolios with pre-configured birthday and wedding anniversaries to witness the automated warnings?",
@@ -985,10 +994,19 @@ export default function App() {
             </div>
 
             {/* System clock bubble */}
-            <span className="px-3 py-1.5 lg:px-4 lg:py-2 bg-white/50 backdrop-blur-md border border-white/75 rounded-full text-xs font-mono font-bold text-slate-700 flex items-center gap-1.5 select-none font-sans shadow-sm">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-              2026-05-25 (ڕێکەوتی سیستەم)
-            </span>
+            <div className="flex items-center gap-1.5 bg-white/60 hover:bg-white/80 border border-slate-200 hover:border-slate-300 rounded-full px-3 py-1.5 lg:px-4 lg:py-2 shadow-sm transition-all text-xs font-bold text-slate-700 focus-within:ring-2 focus-within:ring-indigo-500/20">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+              <input
+                type="date"
+                value={systemDate}
+                onChange={(e) => setSystemDate(e.target.value)}
+                className="bg-transparent border-0 p-0 text-xs font-sans font-extrabold text-slate-700 focus:ring-0 cursor-pointer outline-none w-28 lg:w-32"
+                title={language === "ku" ? "گۆڕینی ڕێکەوتی سیستەم" : "Change System Date"}
+              />
+              <span className="text-[10px] text-slate-400 font-extrabold select-none shrink-0 font-sans">
+                {language === "ku" ? "سیستەم" : "System"}
+              </span>
+            </div>
           </div>
 
         </header>
@@ -1231,6 +1249,7 @@ export default function App() {
                     onAddGiftIdea={addGiftLog}
                     onTriggerWhatsApp={triggerWhatsAppComposer}
                     language={language}
+                    systemDate={systemDate}
                   />
                 )}
 
@@ -1260,6 +1279,7 @@ export default function App() {
                     employees={displayEmployees}
                     onTriggerWhatsApp={triggerWhatsAppComposer}
                     language={language}
+                    systemDate={systemDate}
                   />
                 )}
 

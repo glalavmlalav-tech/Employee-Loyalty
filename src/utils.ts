@@ -67,7 +67,7 @@ export function getActiveAlerts(employees: Employee[], referenceDateStr: string 
     
     // Check Birthday
     const bdayCalc = getDaysRemaining(emp.birthDate, referenceDateStr);
-    if (bdayCalc && bdayCalc.days >= 0 && bdayCalc.days <= 2) {
+    if (bdayCalc && bdayCalc.days >= -2 && bdayCalc.days <= 2) {
       const age = currentYear - bdayCalc.yearOfEvent;
       alerts.push({
         id: `bday-${emp.id}`,
@@ -85,7 +85,7 @@ export function getActiveAlerts(employees: Employee[], referenceDateStr: string 
     // Check Wedding Anniversary
     if (emp.maritalStatus === "married" && emp.marriageAnniversary) {
       const annCalc = getDaysRemaining(emp.marriageAnniversary, referenceDateStr);
-      if (annCalc && annCalc.days >= 0 && annCalc.days <= 2) {
+      if (annCalc && annCalc.days >= -2 && annCalc.days <= 2) {
         const marriedYears = currentYear - annCalc.yearOfEvent;
         alerts.push({
           id: `anniv-${emp.id}`,

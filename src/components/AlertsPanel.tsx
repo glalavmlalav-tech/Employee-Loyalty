@@ -52,6 +52,7 @@ interface AlertsPanelProps {
   onAddGiftIdea: (giftData: Omit<GiftLog, "id" | "updatedAt">) => Promise<void>;
   onTriggerWhatsApp: (employee: Employee, eventType: "birthday" | "marriage_anniversary" | "work_anniversary") => void;
   language: "ku" | "en";
+  systemDate?: string;
 }
 
 export default function AlertsPanel({
@@ -61,7 +62,8 @@ export default function AlertsPanel({
   onUpdateGiftStatus,
   onAddGiftIdea,
   onTriggerWhatsApp,
-  language
+  language,
+  systemDate
 }: AlertsPanelProps) {
   const [editingGiftId, setEditingGiftId] = useState<string | null>(null);
   const [giftInput, setGiftInput] = useState<string>("");
@@ -112,7 +114,7 @@ export default function AlertsPanel({
         </head>
         <body>
           <h1>${isKu ? "دۆسیەی کارمەندان - ڕاپۆرتی بۆنە نزیکەکان" : "Staff Loyalty Hub - Nearby Milestones & Gift Plan"}</h1>
-          <p><strong>${isKu ? "ڕێکەوتی جێبەجێکردن:" : "Generated On:"}</strong> 2026-05-25</p>
+          <p><strong>${isKu ? "ڕێکەوتی جێبەجێکردن:" : "Generated On:"}</strong> ${systemDate || "2026-05-25"}</p>
           <table>
             <thead>
               <tr>
@@ -132,7 +134,7 @@ export default function AlertsPanel({
                   <td>${getBusinessLabel(al.business)}</td>
                   <td>${al.type === "birthday" ? (isKu ? "رۆژی لەدایکبوون 🎂" : "Birthday 🎂") : al.type === "marriage_anniversary" ? (isKu ? "ساڵیادی هاوسەرگیری 💍" : "Wedding Anniversary 💍") : (isKu ? "ساڵیادی دامەزراندن 🏆" : "Work Anniversary 🏆")}</td>
                   <td><span class="date">${al.actualDate}</span></td>
-                  <td><strong>${al.daysRemaining === 0 ? (isKu ? "ئەمڕۆ!" : "Today!") : al.daysRemaining === 1 ? (isKu ? "سبەی!" : "Tomorrow!") : (isKu ? `${al.daysRemaining} ڕۆژ` : `${al.daysRemaining} days`)}</strong></td>
+                  <td><strong>${al.daysRemaining === 0 ? (isKu ? "ئەمڕۆ!" : "Today!") : al.daysRemaining === 1 ? (isKu ? "سبەی!" : "Tomorrow!") : al.daysRemaining === -1 ? (isKu ? "دوێنێ بوو!" : "Yesterday!") : al.daysRemaining === -2 ? (isKu ? "پێش ٢ ڕۆژ بوو!" : "2 days ago") : (isKu ? `${al.daysRemaining} ڕۆژ` : `${al.daysRemaining} days`)}</strong></td>
                 </tr>
               `).join("")}
             </tbody>
@@ -153,15 +155,29 @@ export default function AlertsPanel({
   };
 
   const t = {
-    alertsTitle: language === "ku" ? "بەشی ئاگەداریە بەپەلەکان (٢ رۆژ پێشتر)" : "Urgent Alerts & Warnings (2 Days Ahead)",
-    noAlerts: language === "ku" ? "هیچ بۆنەیەکی نزیک نییە لە دوو رۆژی داهاتوودا." : "No upcoming employee birthdays or anniversaries in the next 2 days.",
+    alertsTitle: language === "ku" ? "بەشی ئاگەداریە بەپەلەکان (٢ ڕۆژ پێش تا ٢ ڕۆژ دوای بۆنە)" : "Urgent Alerts & Warnings (2 Days Before & After)",
+    noAlerts: language === "ku" ? "هیچ بۆنەیەکی نزیک یان نوێ نییە لەم بەشەدا." : "No upcoming or recent employee birthdays or anniversaries (2 days buffer).",
     birthday: language === "ku" ? "رۆژی لەدایکبوون" : "Birthday",
     anniversary: language === "ku" ? "ساڵیادی هاوسەرگیری" : "Wedding Anniversary",
     workAnniversary: language === "ku" ? "ساڵیادی دامەزراندن" : "Work Anniversary",
     today: language === "ku" ? "ئەمڕۆ!" : "Today!",
     tomorrow: language === "ku" ? "سبەی!" : "Tomorrow!",
-    daysRemainingKu: (n: number) => n === 2 ? "٢ رۆژی ماوە" : `${n} رۆژ ماوە`,
-    daysRemainingEn: (n: number) => n === 1 ? "1 day left" : `${n} days left`,
+    daysRemainingKu: (n: number) => {
+      if (n === 2) return "٢ رۆژی ماوە";
+      if (n === 1) return "سبەی!";
+      if (n === 0) return "ئەمڕۆ!";
+      if (n === -1) return "دوێنێ بوو!";
+      if (n === -2) return "پێش ٢ ڕۆژ بوو!";
+      return `${n} ڕۆژ`;
+    },
+    daysRemainingEn: (n: number) => {
+      if (n === 2) return "2 days left";
+      if (n === 1) return "Tomorrow!";
+      if (n === 0) return "Today!";
+      if (n === -1) return "Yesterday!";
+      if (n === -2) return "2 days ago";
+      return `${n} days`;
+    },
     prepareGiftButton: language === "ku" ? "پلانی پێدانی دیاری" : "Propose Gift Idea",
     giftTrackerTitle: language === "ku" ? "تۆماری ئامادەکردنی دیارییەکان (فایەربەیس)" : "Gift Preparation Tracker (Firebase Sync)",
     giftTrackerDesc: language === "ku" ? "ئامادەکاری کۆمپانیا بۆ بۆنەکانی کارمەندەکان" : "Review and prepare company gifts for the team's milestones.",
@@ -276,8 +292,8 @@ export default function AlertsPanel({
             </h3>
             <p className="text-slate-500 text-xs md:text-sm mt-1 font-sans">
               {language === "ku" 
-                ? "ئەو کارمەندانەی لە ٢ رۆژی داهاتوودا رۆژی لەدایکبوون یان هاوسەرگیریان هەیە" 
-                : "Automatic 48-hour gift-preparation coordinator for your team's celebrations."}
+                ? "ئەو کارمەندانەی لە ٢ ڕۆژی پێش تا ٢ ڕۆژی دوای بۆنەکەیانن (ڕۆژی لەدایکبوون یان هاوسەرگیری)" 
+                : "Automatic coordinator for your team's celebrations from 2 days before to 2 days after."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
@@ -290,9 +306,9 @@ export default function AlertsPanel({
                 <span>{language === "ku" ? "چاپکردنی ڕاپۆرت" : "Print Report"}</span>
               </button>
             )}
-            <span className="self-start md:self-center bg-white/60 border border-white/80 text-slate-700 text-xs font-mono font-bold px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              2026-05-25 (ڕێکەوتی سیستەم)
+            <span className="self-start md:self-center bg-white/60 border border-slate-200/60 text-slate-700 text-xs font-mono font-bold px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm select-none">
+              <Clock className="w-3.5 h-3.5 text-slate-450" />
+              {systemDate || "2026-05-25"} {language === "ku" ? "(ڕێکەوتی سیستەم)" : "(System Date)"}
             </span>
           </div>
         </div>
@@ -312,10 +328,14 @@ export default function AlertsPanel({
                   : "bg-teal-50 text-teal-700 border-teal-200";
               const isUrgent = alert.daysRemaining === 0;
               const daysColor = isUrgent 
-                ? "bg-rose-500 text-white" 
+                ? "bg-rose-500 text-white animate-pulse" 
                 : alert.daysRemaining === 1 
                   ? "bg-orange-500 text-white" 
-                  : "bg-slate-700 text-white";
+                  : alert.daysRemaining === 2
+                    ? "bg-amber-500 text-white"
+                    : alert.daysRemaining < 0
+                      ? "bg-slate-500 text-white"
+                      : "bg-slate-700 text-white";
 
               return (
                 <div 
@@ -333,9 +353,13 @@ export default function AlertsPanel({
                           ? t.today 
                           : alert.daysRemaining === 1 
                             ? t.tomorrow 
-                            : language === "ku" 
-                              ? t.daysRemainingKu(alert.daysRemaining) 
-                              : t.daysRemainingEn(alert.daysRemaining)}
+                            : alert.daysRemaining === -1
+                              ? (language === "ku" ? "دوێنێ بوو!" : "Yesterday!")
+                              : alert.daysRemaining === -2
+                                ? (language === "ku" ? "پێش ٢ ڕۆژ بوو!" : "2 days ago")
+                                : language === "ku" 
+                                  ? t.daysRemainingKu(alert.daysRemaining) 
+                                  : t.daysRemainingEn(alert.daysRemaining)}
                       </span>
                       <span className="text-[10px] text-slate-500 font-mono font-bold flex items-center gap-1 bg-white/50 border border-white/70 px-2 py-0.5 rounded-lg shadow-inner">
                         <Calendar className="w-3 h-3 text-slate-400" />
