@@ -117,7 +117,7 @@ export default function StaffLoginForm({ language, onLoginSuccess, onLoginWithCr
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={isLoggingIn}
-              placeholder={language === "ku" ? "بۆ نموونە: admin یان qasim" : "e.g. admin or qasim"}
+              placeholder={language === "ku" ? "بۆ نموونە: rawaz یان qasim" : "e.g. rawaz or qasim"}
               className="w-full py-3.5 pr-11 pl-4 bg-white border border-slate-200 hover:border-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 rounded-2xl text-xs font-sans outline-none text-right transition-all disabled:opacity-50"
             />
           </div>

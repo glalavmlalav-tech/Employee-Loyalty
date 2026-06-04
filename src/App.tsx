@@ -353,7 +353,7 @@ export default function App() {
 
         // Seeding super-admin owner if not present once loaded
         const hasOwner = userList.some(
-          (u) => u.username === "glalavmlalav" || u.username === "admin"
+          (u) => u.username === "glalavmlalav"
         );
         if (!hasOwner) {
           setDoc(doc(db, "app_users", "glalavmlalav"), {
@@ -362,16 +362,6 @@ export default function App() {
             password: "admin",
             email: "glalavmlalav@gmail.com",
             name: "Super Admin (glalavmlalav)",
-            role: "super_admin",
-            business: "all",
-            createdAt: new Date().toISOString()
-          }).catch((err) => console.log("Owner seeding backup failed:", err));
-
-          setDoc(doc(db, "app_users", "admin"), {
-            id: "admin",
-            username: "admin",
-            password: "admin",
-            name: "Super Admin (Owner)",
             role: "super_admin",
             business: "all",
             createdAt: new Date().toISOString()
@@ -542,10 +532,10 @@ export default function App() {
     );
 
     // Hard seeding fallbacks if firebase is blank or not seeded yet
-    if (!matched && (cleanUsername === "glalavmlalav" || cleanUsername === "admin") && passwordInput === "admin") {
+    if (!matched && cleanUsername === "glalavmlalav" && passwordInput === "admin") {
       matched = {
-        id: cleanUsername,
-        username: cleanUsername,
+        id: "glalavmlalav",
+        username: "glalavmlalav",
         password: "admin",
         name: "Super Admin (Owner)",
         role: "super_admin",
