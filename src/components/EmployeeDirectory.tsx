@@ -122,6 +122,45 @@ export function getTenureInfo(hireDateStr: string, language: "ku" | "en") {
   }
 }
 
+export function formatServiceTenure(hireDateStr: string, language: "ku" | "en") {
+  if (!hireDateStr) return "";
+  const parts = hireDateStr.split("-");
+  if (parts.length !== 3) return "";
+  
+  const hireYear = parseInt(parts[0]);
+  const hireMonth = parseInt(parts[1]) - 1;
+  const hireDay = parseInt(parts[2]);
+  
+  const now = new Date();
+  
+  let months = (now.getFullYear() - hireYear) * 12 + (now.getMonth() - hireMonth);
+  if (now.getDate() < hireDay) {
+    months--;
+  }
+  if (months < 0) months = 0;
+
+  const years = Math.floor(months / 12);
+  const extraMonths = months % 12;
+
+  let valueStr = "";
+  if (extraMonths === 0) {
+    if (years === 0) {
+      valueStr = `0.0`;
+    } else {
+      valueStr = years.toString();
+    }
+  } else {
+    valueStr = `${years}.${extraMonths}`;
+  }
+
+  if (language === "ku") {
+    return `${valueStr} ساڵ`;
+  }
+
+  const unit = years === 1 && extraMonths === 0 ? "year" : "years";
+  return `${valueStr} ${unit}`;
+}
+
 interface EmployeeDirectoryProps {
   employees: Employee[];
   onAddEmployee: (emp: Omit<Employee, "id">) => Promise<void>;
@@ -1299,7 +1338,14 @@ export default function EmployeeDirectory({
                       )}
                       <div>
                         <h4 className="text-base font-extrabold text-slate-800 font-display leading-tight">{emp.name}</h4>
-                        <p className="text-xs text-slate-500 font-semibold font-sans mt-0.5 leading-none">{emp.role}</p>
+                        <p className="text-xs text-slate-500 font-semibold font-sans mt-0.5 leading-none">
+                          {emp.role}
+                          {emp.hireDate && (
+                            <span className="text-[10px] text-slate-400 font-mono font-medium ml-1.5 whitespace-nowrap">
+                              ({emp.hireDate}) ({formatServiceTenure(emp.hireDate, language)})
+                            </span>
+                          )}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">

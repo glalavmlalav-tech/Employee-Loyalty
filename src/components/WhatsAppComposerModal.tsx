@@ -99,6 +99,19 @@ export default function WhatsAppComposerModal({
   const [newMessage, setNewMessage] = useState<string>("");
   const [newType, setNewType] = useState<"birthday" | "marriage_anniversary" | "work_anniversary" | "general">("general");
 
+  // Textarea references for cursor selection insertion
+  const composeTextareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const templateTextareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  // Available placeholders configuration
+  const TAGS_CONFIG = [
+    { tag: "{name}", ku: "ناوی یەکەم", en: "First Name" },
+    { tag: "{fullname}", ku: "ناوی تەواو", en: "Full Name" },
+    { tag: "{business}", ku: "ناوی بزنس", en: "Business Name" },
+    { tag: "{role}", ku: "پۆست / ڕۆڵ", en: "Position / Role" },
+    { tag: "{phone}", ku: "ژمارەی مۆبایل", en: "Phone Number" }
+  ];
+
   const t = {
     title: language === "ku" ? "نامە نێری واتسئەپ و نووسینەوە" : "WhatsApp Composer & Greetings",
     employeeLabel: language === "ku" ? "کارمەند:" : "Employee:",
@@ -114,11 +127,11 @@ export default function WhatsAppComposerModal({
     editTemplate: language === "ku" ? "دەستکاریکردن" : "Edit Template",
     deleteTemplate: language === "ku" ? "سڕینەوە" : "Delete Template",
     titleInput: language === "ku" ? "ناونیشانی نامەکە (بۆ ناسینەوە)" : "Template Name (for identification)",
-    messageInput: language === "ku" ? "ناوەڕۆکی نامە (دەتوانیت مۆتیڤەکان بنووسیت وەک {name} یان {business})" : "Message Content (Use tags like {name} or {business})",
+    messageInput: language === "ku" ? "ناوەڕۆکی نامە" : "Message Content",
     typeInput: language === "ku" ? "جۆری نامە" : "Template For",
     placeholderHelp: language === "ku" 
-      ? "تێبینی: تاگی {name} دەگۆڕدرێت بە ناوی یەکەم یان تەواوی کارمەندەکە، تاگی {business} دەگۆڕدرێت بە ناوی بڕاندەکە."
-      : "Tip: {name} will be replaced with employee name, {business} will be replaced with business unit.",
+      ? "تێبینی: مۆتیڤەکان (وەک ناوی یەکەم، ناوی بزنس، هتد) پێش ناردن خۆکار جێگیر دەکرێن."
+      : "Tip: Tags will be auto-replaced before opening WhatsApp.",
     noPhone: language === "ku" ? "مۆبایل تۆمار نەکراوە!" : "No phone number configured!",
     copied: language === "ku" ? "کۆپی کرا" : "Copied Text",
     birthday: language === "ku" ? "ڕۆژی لەدایکبوون" : "Birthday",
@@ -157,16 +170,60 @@ export default function WhatsAppComposerModal({
 
   if (!isOpen) return null;
 
-  // Helper function to replace placeholder tags {name} {business}
+  // Insert tag helper at cursor for Compose textarea
+  const insertTagAtComposeCursor = (tag: string) => {
+    const textarea = composeTextareaRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const before = messageText.substring(0, start);
+      const after = messageText.substring(end, messageText.length);
+      const newText = before + tag + after;
+      setMessageText(newText);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+      }, 0);
+    } else {
+      setMessageText((prev) => prev + tag);
+    }
+  };
+
+  // Insert tag helper at cursor for Template textarea
+  const insertTagAtTemplateCursor = (tag: string) => {
+    const textarea = templateTextareaRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const before = newMessage.substring(0, start);
+      const after = newMessage.substring(end, newMessage.length);
+      const newText = before + tag + after;
+      setNewMessage(newText);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+      }, 0);
+    } else {
+      setNewMessage((prev) => prev + tag);
+    }
+  };
+
+  // Helper function to replace placeholder tags {name} {fullname} {business} {role} {phone}
   const replacePlaceholders = (text: string) => {
     if (!text) return "";
     const bLabel = BUSINESSES[employee.business] 
       ? (language === "ku" ? BUSINESSES[employee.business].nameKu : BUSINESSES[employee.business].nameEn)
       : employee.business;
 
+    // Use only the first name for {name}
+    const firstName = employee.name ? employee.name.trim().split(/\s+/)[0] : "";
+
     return text
-      .replace(/{name}/g, employee.name)
-      .replace(/{business}/g, bLabel);
+      .replace(/{name}/g, firstName)
+      .replace(/{fullname}/g, employee.name || "")
+      .replace(/{business}/g, bLabel)
+      .replace(/{role}/g, employee.role || "")
+      .replace(/{phone}/g, employee.phone || "");
   };
 
   // Handle template selection change
@@ -382,7 +439,7 @@ export default function WhatsAppComposerModal({
               </div>
 
               {/* final message editable box */}
-              <div className="space-y-1.5 relative">
+              <div className="space-y-2 relative">
                 <div className="flex justify-between items-center">
                   <label className="block text-xs font-black text-slate-700">{t.customText}</label>
                   <button 
@@ -393,7 +450,27 @@ export default function WhatsAppComposerModal({
                     <span>{t.copied}</span>
                   </button>
                 </div>
+
+                {/* Clickable Tag Buttons */}
+                <div className="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200/60 rounded-2xl">
+                  <span className="text-[10px] font-bold text-slate-450 self-center px-1">
+                    {language === "ku" ? "کلیك بکە بۆ نووسینی مۆتیڤ (تاگ):" : "Click to insert tag:"}
+                  </span>
+                  {TAGS_CONFIG.map((item) => (
+                    <button
+                      key={item.tag}
+                      type="button"
+                      onClick={() => insertTagAtComposeCursor(item.tag)}
+                      className="px-2.5 py-1 text-[11px] font-black font-sans bg-white border border-slate-250 hover:bg-emerald-500 hover:text-white rounded-xl shadow-2xs transition cursor-pointer flex items-center gap-1"
+                    >
+                      <span className="text-emerald-600 font-mono text-[9px]">{item.tag}</span>
+                      <span className="text-[9px] text-slate-450 font-medium">{language === "ku" ? item.ku : item.en}</span>
+                    </button>
+                  ))}
+                </div>
+
                 <textarea
+                  ref={composeTextareaRef}
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
                   className="w-full h-36 p-4 rounded-2xl border border-slate-200/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-sans text-[13px] leading-relaxed text-slate-800 bg-white"
@@ -440,9 +517,29 @@ export default function WhatsAppComposerModal({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1">{t.messageInput}</label>
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-slate-550 mb-1">{t.messageInput}</label>
+
+                  {/* Clickable Tag Buttons for Template editing too */}
+                  <div className="flex flex-wrap gap-1.5 p-1.5 bg-white border border-slate-200/60 rounded-xl mb-1.5">
+                    <span className="text-[9px] font-bold text-slate-450 self-center px-1">
+                      {language === "ku" ? "کۆدی تاگ:" : "Tags:"}
+                    </span>
+                    {TAGS_CONFIG.map((item) => (
+                      <button
+                        key={item.tag}
+                        type="button"
+                        onClick={() => insertTagAtTemplateCursor(item.tag)}
+                        className="px-2 py-0.5 text-[10px] font-black font-sans bg-slate-50 border border-slate-200 hover:bg-emerald-500 hover:text-white rounded-lg shadow-2xs transition cursor-pointer flex items-center gap-1"
+                      >
+                        <span className="text-emerald-600 font-mono text-[8px]">{item.tag}</span>
+                        <span className="text-[8px] text-slate-450 font-medium">{language === "ku" ? item.ku : item.en}</span>
+                      </button>
+                    ))}
+                  </div>
+
                   <textarea
+                    ref={templateTextareaRef}
                     rows={3}
                     className="w-full p-3 text-xs rounded-xl border border-slate-200/80 bg-white focus:border-emerald-500 leading-relaxed font-sans"
                     value={newMessage}

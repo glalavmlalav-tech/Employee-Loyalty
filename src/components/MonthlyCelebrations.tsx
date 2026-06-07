@@ -12,6 +12,7 @@ import {
   Download
 } from "lucide-react";
 import { Employee, BusinessId, BUSINESSES } from "../types";
+import { formatServiceTenure } from "./EmployeeDirectory";
 
 const getWhatsAppLink = (phone: string, name: string, type: "birthday" | "marriage_anniversary" | "work_anniversary", language: "ku" | "en") => {
   if (!phone) return "";
@@ -469,6 +470,11 @@ export default function MonthlyCelebrations({ employees, onTriggerWhatsApp, lang
                             </span>
                             <span className="text-xs text-slate-400 font-semibold font-sans">
                               • {occ.employee.role}
+                              {occ.employee.hireDate && (
+                                <span className="text-[10px] text-slate-400 font-mono font-medium ml-1.5 whitespace-nowrap">
+                                  ({occ.employee.hireDate}) ({formatServiceTenure(occ.employee.hireDate, language)})
+                                </span>
+                              )}
                             </span>
                           </div>
                         </div>
