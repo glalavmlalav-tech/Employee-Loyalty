@@ -25,7 +25,8 @@ import {
   Shield,
   Clock,
   Printer,
-  AlertTriangle
+  AlertTriangle,
+  FileText
 } from "lucide-react";
 import { Employee, BusinessId, BUSINESSES, MaritalStatus, EmployeeStatus } from "../types";
 import ImageCropper from "./ImageCropper";
@@ -171,6 +172,8 @@ export default function EmployeeDirectory({
   const [showCamera, setShowCamera] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [cameraFacingMode, setCameraFacingMode] = useState<"user" | "environment">("user");
+  const [activeDocCamera, setActiveDocCamera] = useState<"passport" | "iqama" | null>(null);
+  const [docStream, setDocStream] = useState<MediaStream | null>(null);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportValue, setReportValue] = useState("");
@@ -193,7 +196,11 @@ export default function EmployeeDirectory({
     emergencyContactRelation: "",
     ethnicity: "",
     citizenship: "",
-    residenceAddress: ""
+    residenceAddress: "",
+    passportOrNationalCardUrl: "",
+    iqamaUrl: "",
+    isForeigner: false,
+    notes: ""
   });
 
   const t = {
@@ -242,7 +249,11 @@ export default function EmployeeDirectory({
       emergencyContactRelation: "",
       ethnicity: "",
       citizenship: "",
-      residenceAddress: ""
+      residenceAddress: "",
+      passportOrNationalCardUrl: "",
+      iqamaUrl: "",
+      isForeigner: false,
+      notes: ""
     });
     setEditingEmployee(null);
     setShowAddModal(true);
@@ -265,7 +276,11 @@ export default function EmployeeDirectory({
       emergencyContactRelation: emp.emergencyContactRelation || "",
       ethnicity: emp.ethnicity || "",
       citizenship: emp.citizenship || "",
-      residenceAddress: emp.residenceAddress || ""
+      residenceAddress: emp.residenceAddress || "",
+      passportOrNationalCardUrl: emp.passportOrNationalCardUrl || "",
+      iqamaUrl: emp.iqamaUrl || "",
+      isForeigner: !!emp.iqamaUrl,
+      notes: emp.notes || ""
     });
     setShowAddModal(true);
   };
@@ -294,7 +309,10 @@ export default function EmployeeDirectory({
           emergencyContactRelation: formData.emergencyContactRelation,
           ethnicity: formData.ethnicity,
           citizenship: formData.citizenship,
-          residenceAddress: formData.residenceAddress
+          residenceAddress: formData.residenceAddress,
+          passportOrNationalCardUrl: formData.passportOrNationalCardUrl,
+          iqamaUrl: formData.iqamaUrl,
+          notes: formData.notes
         });
       } else {
         await onAddEmployee({
@@ -312,7 +330,10 @@ export default function EmployeeDirectory({
           emergencyContactRelation: formData.emergencyContactRelation,
           ethnicity: formData.ethnicity,
           citizenship: formData.citizenship,
-          residenceAddress: formData.residenceAddress
+          residenceAddress: formData.residenceAddress,
+          passportOrNationalCardUrl: formData.passportOrNationalCardUrl,
+          iqamaUrl: formData.iqamaUrl,
+          notes: formData.notes
         });
       }
       stopCamera();
@@ -347,6 +368,7 @@ export default function EmployeeDirectory({
     }
     setStream(null);
     setShowCamera(false);
+    stopDocCamera();
   };
 
   const toggleCamera = async () => {
@@ -372,6 +394,55 @@ export default function EmployeeDirectory({
         const dataUrl = canvas.toDataURL("image/jpeg", 0.9); // high quality raw
         setImageToCrop(dataUrl);
         stopCamera();
+      }
+    }
+  };
+
+  const startDocCamera = async (type: "passport" | "iqama", mode?: "user" | "environment") => {
+    try {
+      if (docStream) {
+        docStream.getTracks().forEach((track) => track.stop());
+      }
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: mode || "environment", width: { ideal: 1280 }, height: { ideal: 720 } } 
+      });
+      setDocStream(mediaStream);
+      setActiveDocCamera(type);
+      setTimeout(() => {
+        const videoElement = document.getElementById(`doc-camera-stream-${type}`) as HTMLVideoElement;
+        if (videoElement) {
+          videoElement.srcObject = mediaStream;
+        }
+      }, 150);
+    } catch (e) {
+      alert(language === "ku" ? "کێشەیەک ڕوویدا لە دەستپێکردنی کامێرا، تکایە دڵنیابەوە لە پێدانی مۆڵەتی پێویست." : "Could not open camera, please ensure permissions are granted.");
+    }
+  };
+
+  const stopDocCamera = () => {
+    if (docStream) {
+      docStream.getTracks().forEach((track) => track.stop());
+    }
+    setDocStream(null);
+    setActiveDocCamera(null);
+  };
+
+  const captureDocPhoto = (type: "passport" | "iqama") => {
+    const videoElement = document.getElementById(`doc-camera-stream-${type}`) as HTMLVideoElement;
+    if (videoElement) {
+      const canvas = document.createElement("canvas");
+      canvas.width = videoElement.videoWidth || 1280;
+      canvas.height = videoElement.videoHeight || 720;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+        if (type === "passport") {
+          setFormData((prev) => ({ ...prev, passportOrNationalCardUrl: dataUrl }));
+        } else {
+          setFormData((prev) => ({ ...prev, iqamaUrl: dataUrl }));
+        }
+        stopDocCamera();
       }
     }
   };
@@ -1375,6 +1446,72 @@ export default function EmployeeDirectory({
                         </div>
                       </div>
                     )}
+
+                    {/* Attachments & Notes List for Employee */}
+                    {(emp.passportOrNationalCardUrl || emp.iqamaUrl || emp.notes) && (
+                      <div className="border-t border-slate-150 pt-3 mt-3.5 flex flex-col gap-2">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                          📂 {language === "ku" ? "بەڵگەنامەکان و تێبینییەکان" : "Documents & Notes"}
+                        </span>
+
+                        {emp.passportOrNationalCardUrl && (
+                          <div className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200/60 rounded-xl">
+                            <span className="text-[11px] font-extrabold text-slate-700 flex items-center gap-1">
+                              📄 {language === "ku" ? "پاسپۆرت / کارتی نیشتیمانی" : "Passport / National ID"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const link = document.createElement("a");
+                                link.href = emp.passportOrNationalCardUrl!;
+                                link.download = `${emp.name.trim().replace(/\s+/g, "_")}_passport.png`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }}
+                              className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[10px] rounded-lg border border-indigo-200/40 flex items-center gap-1 transition"
+                            >
+                              <Download className="w-3 h-3" />
+                              {language === "ku" ? "داگرتن" : "Download"}
+                            </button>
+                          </div>
+                        )}
+
+                        {emp.iqamaUrl && (
+                          <div className="flex items-center justify-between p-2 bg-emerald-50/50 border border-emerald-100/50 rounded-xl">
+                            <span className="text-[11px] font-extrabold text-emerald-850 flex items-center gap-1">
+                              💳 {language === "ku" ? "کۆپی ئیقامە" : "Residency Copy (Iqama)"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const link = document.createElement("a");
+                                link.href = emp.iqamaUrl!;
+                                link.download = `${emp.name.trim().replace(/\s+/g, "_")}_iqama.png`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }}
+                              className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-extrabold text-[10px] rounded-lg border border-emerald-200/40 flex items-center gap-1 transition"
+                            >
+                              <Download className="w-3 h-3" />
+                              {language === "ku" ? "داگرتن" : "Download"}
+                            </button>
+                          </div>
+                        )}
+
+                        {emp.notes && (
+                          <div className="p-2.5 bg-amber-500/5 border border-dashed border-amber-200/40 rounded-xl mt-1">
+                            <span className="text-[10px] font-black text-amber-800 block mb-1">
+                              📝 {language === "ku" ? "تێبینییەکان:" : "Notes / Remarks:"}
+                            </span>
+                            <p className="text-[11px] text-slate-700 leading-normal font-sans whitespace-pre-wrap">
+                              {emp.notes}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1484,7 +1621,7 @@ export default function EmployeeDirectory({
                     : t.addEmployee}
                 </h3>
                 <button 
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => { stopCamera(); setShowAddModal(false); }}
                   className="p-1 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition"
                 >
                   <X className="w-5 h-5" />
@@ -1882,6 +2019,282 @@ export default function EmployeeDirectory({
                       onChange={(e) => setFormData({ ...formData, residenceAddress: e.target.value })}
                     />
                   </div>
+
+                  {/* Part 1: National Card or Passport Uploader */}
+                  <div className="col-span-full border border-slate-100 bg-slate-50/50 rounded-2xl p-4 mt-2">
+                    <div className="mb-3">
+                      <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                        📄 {language === "ku" ? "کارتی نیشتیمانی یان پاسپۆرت" : "National Card or Passport"} <span className="text-rose-500 font-bold">*</span>
+                      </span>
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        {language === "ku" ? "تکایە وێنەیەکی ڕوونی کارتی نیشتیمانی یان پاسپۆرتەکە بەرزبکەرەوە یان بگرە" : "Please upload or capture a clear photo of the national card or passport"}
+                      </p>
+                    </div>
+
+                    {/* Passport preview and control */}
+                    <div className="flex flex-col md:flex-row gap-4 items-center">
+                      <div className="w-full md:w-1/2 flex flex-col gap-2">
+                        {formData.passportOrNationalCardUrl ? (
+                          <div className="relative group rounded-xl overflow-hidden border border-slate-200 bg-white aspect-[16/10] flex items-center justify-center">
+                            <img
+                              src={formData.passportOrNationalCardUrl}
+                              alt="Passport"
+                              className="w-full h-full object-contain max-h-[160px]"
+                            />
+                            {/* View/Download icon overlay for read-only or any mode */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const link = document.createElement("a");
+                                link.href = formData.passportOrNationalCardUrl!;
+                                link.download = `${formData.name.trim().replace(/\s+/g, "_")}_passport.png`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }}
+                              className="absolute bottom-2 right-2 bg-indigo-500 hover:bg-indigo-600 text-white p-1 rounded-full shadow-md transition"
+                              title={language === "ku" ? "داونلۆدکردنی بەڵگەنامە" : "Download Document"}
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                            {!isReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, passportOrNationalCardUrl: "" })}
+                                className="absolute top-2 right-2 bg-rose-500 hover:bg-rose-600 text-white p-1 rounded-full shadow-md transition"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="border border-dashed border-slate-300 bg-white w-full rounded-xl aspect-[16/10] flex flex-col items-center justify-center text-slate-400 p-4 text-center select-none max-h-[160px]">
+                            <FileText className="w-8 h-8 text-slate-300 mb-1" />
+                            <span className="text-[11px] font-bold">
+                              {language === "ku" ? "هیچ بەڵگەنامەیەک بارنەکراوە" : "No document selected"}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Controls for Passport Upload/Capture */}
+                      {!isReadOnly && (
+                        <div className="w-full md:w-1/2 flex flex-col gap-2">
+                          <div className="flex gap-2">
+                            {/* File Upload Button */}
+                            <label className="flex-1 px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl flex items-center justify-center gap-1.5 text-xs text-slate-700 font-bold shadow-sm cursor-pointer transition">
+                              <Upload className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                              <span>{language === "ku" ? "بۆگەڕان / بارکردن" : "Upload File"}</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                      setFormData((prev) => ({ ...prev, passportOrNationalCardUrl: reader.result as string }));
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            </label>
+
+                            {/* Camera Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeDocCamera === "passport") {
+                                  stopDocCamera();
+                                } else {
+                                  startDocCamera("passport");
+                                }
+                              }}
+                              className={`flex-1 px-3 py-2 border rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold shadow-sm transition ${
+                                activeDocCamera === "passport"
+                                  ? "bg-rose-50 border-rose-200 text-rose-700 font-extrabold animate-pulse"
+                                  : "bg-white hover:bg-slate-50 border-slate-200 hover:border-slate-300 text-slate-700"
+                              }`}
+                            >
+                              <Camera className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                              <span>
+                                {activeDocCamera === "passport"
+                                  ? (language === "ku" ? "پارسە" : "Close")
+                                  : (language === "ku" ? "کردنەوەی کامێرا" : "Use Camera")}
+                              </span>
+                            </button>
+                          </div>
+
+                          {/* Live Doc Camera Frame */}
+                          {activeDocCamera === "passport" && (
+                            <div className="bg-slate-900 rounded-xl p-2 relative overflow-hidden flex flex-col items-center gap-2 border border-slate-800 animate-fade-in w-full">
+                              <video
+                                id="doc-camera-stream-passport"
+                                autoPlay
+                                playsInline
+                                className="w-full max-h-[140px] object-cover rounded-lg"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => captureDocPhoto("passport")}
+                                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-[10px] rounded-lg flex items-center gap-1 shadow-md transition"
+                              >
+                                <Camera className="w-3.5 h-3.5 shrink-0" />
+                                {language === "ku" ? "گرتنی وێنە" : "Capture Photo"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Part 2: Information Card or Residency Card / Iqama Uploader */}
+                  <div className="col-span-full border border-teal-100 bg-teal-50/20 rounded-2xl p-4 mt-2">
+                    <div className="mb-3">
+                      <span className="text-xs font-black text-teal-900 flex items-center gap-1.5">
+                        💳 {language === "ku" ? "کارتی زانیاری یان کارتی نشینگە (ئیقامە)" : "Information Card or Residency Card (Iqama)"} <span className="text-teal-600 font-bold">*</span>
+                      </span>
+                      <p className="text-[10px] text-teal-800 mt-0.5">
+                        {language === "ku" ? "وێنەیەکی ڕوونی کارتی زانیاری یان کارتی نیشتەجێبوون (ئیقامە) باربکە یان بگرە" : "Please upload or capture a clear photo of the information card or residency permit card (iqama)"}
+                      </p>
+                    </div>
+
+                    {/* Iqama preview and control */}
+                    <div className="flex flex-col md:flex-row gap-4 items-center">
+                      <div className="w-full md:w-1/2 flex flex-col gap-2">
+                        {formData.iqamaUrl ? (
+                          <div className="relative group rounded-xl overflow-hidden border border-teal-200 bg-white aspect-[16/10] flex items-center justify-center">
+                            <img
+                              src={formData.iqamaUrl}
+                              alt="Residency Document"
+                              className="w-full h-full object-contain max-h-[160px]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const link = document.createElement("a");
+                                link.href = formData.iqamaUrl!;
+                                link.download = `${formData.name.trim().replace(/\s+/g, "_")}_residency.png`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                              }}
+                              className="absolute bottom-2 right-2 bg-indigo-500 hover:bg-indigo-600 text-white p-1 rounded-full shadow-md transition"
+                              title={language === "ku" ? "داونلۆدکردنی بەڵگەنامە" : "Download Document"}
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                            {!isReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, iqamaUrl: "" })}
+                                className="absolute top-2 right-2 bg-rose-500 hover:bg-rose-600 text-white p-1 rounded-full shadow-md transition"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="border border-dashed border-teal-200 bg-white w-full rounded-xl aspect-[16/10] flex flex-col items-center justify-center text-teal-600/70 p-4 text-center select-none max-h-[160px]">
+                            <FileText className="w-8 h-8 text-teal-400 mb-1" />
+                            <span className="text-[11px] font-bold">
+                              {language === "ku" ? "هیچ بەڵگەنامەیەک بارنەکراوە" : "No document selected"}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Controls for Residency Upload/Capture */}
+                      {!isReadOnly && (
+                        <div className="w-full md:w-1/2 flex flex-col gap-2">
+                          <div className="flex gap-2">
+                            {/* File Upload Button */}
+                            <label className="flex-1 px-3 py-2 bg-white hover:bg-teal-50 border border-teal-200 hover:border-teal-300 rounded-xl flex items-center justify-center gap-1.5 text-xs text-teal-800 font-bold shadow-sm cursor-pointer transition">
+                              <Upload className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                              <span>{language === "ku" ? "بۆگەڕان / بارکردن" : "Upload File"}</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                      setFormData((prev) => ({ ...prev, iqamaUrl: reader.result as string }));
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            </label>
+
+                            {/* Camera Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (activeDocCamera === "iqama") {
+                                  stopDocCamera();
+                                } else {
+                                  startDocCamera("iqama");
+                                }
+                              }}
+                              className={`flex-1 px-3 py-2 border rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold shadow-sm transition ${
+                                activeDocCamera === "iqama"
+                                  ? "bg-rose-50 border-rose-200 text-rose-700 font-extrabold animate-pulse"
+                                  : "bg-white hover:bg-teal-50 border-teal-200 hover:border-teal-300 text-teal-850"
+                              }`}
+                            >
+                              <Camera className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                              <span>
+                                {activeDocCamera === "iqama"
+                                  ? (language === "ku" ? "پارسە" : "Close")
+                                  : (language === "ku" ? "کردنەوەی کامێرا" : "Use Camera")}
+                              </span>
+                            </button>
+                          </div>
+
+                          {/* Live Doc Camera Frame */}
+                          {activeDocCamera === "iqama" && (
+                            <div className="bg-slate-900 rounded-xl p-2 relative overflow-hidden flex flex-col items-center gap-2 border border-slate-800 animate-fade-in w-full">
+                              <video
+                                id="doc-camera-stream-iqama"
+                                autoPlay
+                                playsInline
+                                className="w-full max-h-[140px] object-cover rounded-lg"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => captureDocPhoto("iqama")}
+                                className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[10px] rounded-lg flex items-center gap-1 shadow-md transition"
+                              >
+                                <Camera className="w-3.5 h-3.5 shrink-0" />
+                                {language === "ku" ? "گرتنی وێنە" : "Capture Photo"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Part 3: Custom Notes Field at the end of the form */}
+                  <div className="col-span-full">
+                    <label className="block text-xs font-black text-slate-700 mb-1">
+                      📝 {language === "ku" ? "تێبینییەکان" : "Notes / Remarks"}
+                    </label>
+                    <textarea
+                      disabled={isReadOnly}
+                      rows={2.5}
+                      placeholder={language === "ku" ? "تێبینی کوورت یان زانیاری زیاتر بنووسە..." : "Enter additional notes, details, exceptions or comments..."}
+                      className="w-full p-2.5 bg-white/70 border border-slate-200 rounded-xl focus:ring-1 focus:ring-amber-500 text-xs disabled:opacity-75 resize-none leading-normal"
+                      value={formData.notes || ""}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    />
+                  </div>
                 </div>
 
                 <div className="flex gap-3 justify-end border-t border-slate-100 pt-5 mt-2">
@@ -1901,7 +2314,7 @@ export default function EmployeeDirectory({
                   )}
                   <button
                     type="button"
-                    onClick={() => setShowAddModal(false)}
+                    onClick={() => { stopCamera(); setShowAddModal(false); }}
                     className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition"
                   >
                     {isReadOnly ? (language === "ku" ? "داخستن" : "Close") : t.cancel}

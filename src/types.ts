@@ -104,6 +104,9 @@ export interface Employee {
   ethnicity?: string; // نەتەوە (کورد، عەرەب، فارس، کلدانی ئەشوری...)
   citizenship?: string; // ڕەگەزنامە (عیراقی، ئێرانی، هیندستانی...)
   residenceAddress?: string; // ناونیشانی نیشتەجێبوون (بۆ نموونە: هەولێر - گەڕەکی نەورۆز)
+  passportOrNationalCardUrl?: string; // وێنەی پاسپۆرت یان کارتی نیشتیمانی
+  iqamaUrl?: string; // وێنەی ئیقامە بۆ بیانیەکان
+  notes?: string; // تێبینیەکان
   createdBy?: string; // Username of creator
   reportText?: string; // Detail about incorrect info reported by admin
   reportStatus?: "pending" | "resolved"; // Status of the report
