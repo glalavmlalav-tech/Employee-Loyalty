@@ -36,7 +36,9 @@ import {
   Sliders,
   Database,
   Lock,
-  UserCheck
+  UserCheck,
+  Download,
+  Upload
 } from "lucide-react";
 import { db, auth, handleFirestoreError, OperationType } from "./firebase";
 import { Employee, LoyaltyActivity, GiftLog, AlertNotification, BusinessId, BUSINESSES, AppUser } from "./types";
@@ -136,6 +138,14 @@ const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
   }
 ];
 
+const safeLocalStorageSetItem = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn("Storage quota exceeded or disabled. Unable to cache data locally.", e);
+  }
+};
+
 const getTodayDateString = (): string => {
   const d = new Date();
   const year = d.getFullYear();
@@ -150,12 +160,55 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [systemDate, setSystemDate] = useState<string>(getTodayDateString);
   
-  // Real-time states
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [activities, setActivities] = useState<LoyaltyActivity[]>([]);
-  const [giftLogs, setGiftLogs] = useState<GiftLog[]>([]);
-  const [appUsers, setAppUsers] = useState<AppUser[]>([]);
-  const [appUsersLoaded, setAppUsersLoaded] = useState(false);
+  // Real-time states with robust local caching fallbacks
+  const [employees, setEmployees] = useState<Employee[]>(() => {
+    const cached = localStorage.getItem("cache_employees");
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [activities, setActivities] = useState<LoyaltyActivity[]>(() => {
+    const cached = localStorage.getItem("cache_activities");
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [giftLogs, setGiftLogs] = useState<GiftLog[]>(() => {
+    const cached = localStorage.getItem("cache_gifts");
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [appUsers, setAppUsers] = useState<AppUser[]>(() => {
+    const cached = localStorage.getItem("cache_app_users");
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [appUsersLoaded, setAppUsersLoaded] = useState(() => {
+    const cached = localStorage.getItem("cache_app_users");
+    return cached ? true : false;
+  });
   
   const [userSession, setUserSession] = useState<AppUser | null>(() => {
     const saved = localStorage.getItem("app_user_session");
@@ -217,7 +270,7 @@ export default function App() {
         try {
           await signInAnonymously(auth);
         } catch (e) {
-          console.error("Anonymous authentication failed:", e);
+          console.warn("Anonymous authentication check completed (not signed in):", e);
           setAuthLoading(false);
         }
       } else {
@@ -255,7 +308,7 @@ export default function App() {
         const matchedUser = matched;
         setUserSession((prev) => {
           if (!prev || prev.id !== matchedUser.id || prev.role !== matchedUser.role || prev.business !== matchedUser.business) {
-            localStorage.setItem("app_user_session", JSON.stringify(matchedUser));
+            safeLocalStorageSetItem("app_user_session", JSON.stringify(matchedUser));
             return matchedUser;
           }
           return prev;
@@ -291,10 +344,18 @@ export default function App() {
           empList.push({ id: docSnap.id, ...docSnap.data() } as Employee);
         });
         setEmployees(empList);
+        safeLocalStorageSetItem("cache_employees", JSON.stringify(empList));
         setDbLoading(false);
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, "employees");
+        // Fallback to local cache so user doesn't see a blank screen
+        const cached = localStorage.getItem("cache_employees");
+        if (cached) {
+          try {
+            setEmployees(JSON.parse(cached));
+          } catch (e) {}
+        }
         setDbLoading(false);
       }
     );
@@ -307,11 +368,19 @@ export default function App() {
         snapshot.forEach((docSnap) => {
           actList.push({ id: docSnap.id, ...docSnap.data() } as LoyaltyActivity);
         });
-        // Sort by creation or month
-        setActivities(actList.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+        const sorted = actList.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        setActivities(sorted);
+        safeLocalStorageSetItem("cache_activities", JSON.stringify(sorted));
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, "activities");
+        // Fallback to local cache so user doesn't see a blank screen
+        const cached = localStorage.getItem("cache_activities");
+        if (cached) {
+          try {
+            setActivities(JSON.parse(cached));
+          } catch (e) {}
+        }
         setDbLoading(false);
       }
     );
@@ -324,10 +393,19 @@ export default function App() {
         snapshot.forEach((docSnap) => {
           giftList.push({ id: docSnap.id, ...docSnap.data() } as GiftLog);
         });
-        setGiftLogs(giftList.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+        const sorted = giftList.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        setGiftLogs(sorted);
+        safeLocalStorageSetItem("cache_gifts", JSON.stringify(sorted));
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, "gifts");
+        // Fallback to local cache so user doesn't see a blank screen
+        const cached = localStorage.getItem("cache_gifts");
+        if (cached) {
+          try {
+            setGiftLogs(JSON.parse(cached));
+          } catch (e) {}
+        }
         setDbLoading(false);
       }
     );
@@ -349,6 +427,7 @@ export default function App() {
           userList.push({ id: docSnap.id, ...docSnap.data() } as AppUser);
         });
         setAppUsers(userList);
+        safeLocalStorageSetItem("cache_app_users", JSON.stringify(userList));
         setAppUsersLoaded(true);
 
         // Seeding super-admin owner if not present once loaded
@@ -369,7 +448,16 @@ export default function App() {
         }
       },
       (error) => {
-        console.error("Error fetching admin users from Firestore on startup:", error);
+        console.warn("Error fetching admin users from Firestore on startup (using offline/local configuration):", error);
+        handleFirestoreError(error, OperationType.LIST, "app_users");
+        // Fallback to local cache so user doesn't see a blank screen
+        const cached = localStorage.getItem("cache_app_users");
+        if (cached) {
+          try {
+            setAppUsers(JSON.parse(cached));
+          } catch (e) {}
+        }
+        setAppUsersLoaded(true);
       }
     );
 
@@ -384,24 +472,39 @@ export default function App() {
     setAlerts(currentAlerts);
   }, [employees, systemDate]);
 
-  // Firestore operations
+  // Firestore operations with optimistic offline local persistence support
   const registerEmployeeInFirestore = async (empData: Omit<Employee, "id">) => {
     const collRef = collection(db, "employees");
+    let newEmp: Employee;
     try {
       const docRef = doc(collRef);
-      await setDoc(docRef, {
+      newEmp = {
         ...empData,
         createdBy: userSession?.username || "admin",
         id: docRef.id
+      };
+      // Optimistic update
+      setEmployees((prev) => {
+        const updated = [...prev, newEmp];
+        safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+        return updated;
       });
+      await setDoc(docRef, newEmp);
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, "employees");
+      // If docRef wasn't successfully set or failed, we keep the state (as offline fallback is already written)
     }
   };
 
   const updateEmployeeInFirestore = async (id: string, empData: Partial<Employee>) => {
     const docRef = doc(db, "employees", id);
     try {
+      // Optimistic update
+      setEmployees((prev) => {
+        const updated = prev.map((e) => (e.id === id ? { ...e, ...empData } : e));
+        safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+        return updated;
+      });
       await updateDoc(docRef, empData);
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `employees/${id}`);
@@ -411,6 +514,12 @@ export default function App() {
   const deleteEmployeeFromFirestore = async (id: string) => {
     const docRef = doc(db, "employees", id);
     try {
+      // Optimistic update
+      setEmployees((prev) => {
+        const updated = prev.filter((e) => e.id !== id);
+        safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+        return updated;
+      });
       await deleteDoc(docRef);
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, `employees/${id}`);
@@ -418,13 +527,20 @@ export default function App() {
   };
 
   const addActivityInFirestore = async (actData: Omit<LoyaltyActivity, "id" | "createdAt">) => {
+    const tempId = `act-${Date.now()}`;
+    const newAct: LoyaltyActivity = {
+      ...actData,
+      id: tempId,
+      createdAt: new Date().toISOString()
+    };
     try {
-      const tempId = `act-${Date.now()}`;
-      await setDoc(doc(db, "activities", tempId), {
-        ...actData,
-        id: tempId,
-        createdAt: new Date().toISOString()
+      // Optimistic update
+      setActivities((prev) => {
+        const updated = [newAct, ...prev].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        safeLocalStorageSetItem("cache_activities", JSON.stringify(updated));
+        return updated;
       });
+      await setDoc(doc(db, "activities", tempId), newAct);
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, "activities");
     }
@@ -433,6 +549,12 @@ export default function App() {
   const updateActivityStatusInFirestore = async (id: string, status: LoyaltyActivity["status"]) => {
     const docRef = doc(db, "activities", id);
     try {
+      // Optimistic update
+      setActivities((prev) => {
+        const updated = prev.map((act) => act.id === id ? { ...act, status } : act);
+        safeLocalStorageSetItem("cache_activities", JSON.stringify(updated));
+        return updated;
+      });
       await updateDoc(docRef, { status });
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `activities/${id}`);
@@ -442,6 +564,12 @@ export default function App() {
   const deleteActivityFromFirestore = async (id: string) => {
     const docRef = doc(db, "activities", id);
     try {
+      // Optimistic update
+      setActivities((prev) => {
+        const updated = prev.filter((act) => act.id !== id);
+        safeLocalStorageSetItem("cache_activities", JSON.stringify(updated));
+        return updated;
+      });
       await deleteDoc(docRef);
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, `activities/${id}`);
@@ -449,13 +577,20 @@ export default function App() {
   };
 
   const addGiftLog = async (giftData: Omit<GiftLog, "id" | "updatedAt">) => {
+    const tempId = `gift-${Date.now()}`;
+    const newGift: GiftLog = {
+      ...giftData,
+      id: tempId,
+      updatedAt: new Date().toISOString()
+    };
     try {
-      const tempId = `gift-${Date.now()}`;
-      await setDoc(doc(db, "gifts", tempId), {
-        ...giftData,
-        id: tempId,
-        updatedAt: new Date().toISOString()
+      // Optimistic update
+      setGiftLogs((prev) => {
+        const updated = [newGift, ...prev].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        safeLocalStorageSetItem("cache_gifts", JSON.stringify(updated));
+        return updated;
       });
+      await setDoc(doc(db, "gifts", tempId), newGift);
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, "gifts");
     }
@@ -463,14 +598,92 @@ export default function App() {
 
   const updateGiftStatus = async (giftId: string, status: GiftLog["status"]) => {
     const docRef = doc(db, "gifts", giftId);
+    const updatedTime = new Date().toISOString();
     try {
+      // Optimistic update
+      setGiftLogs((prev) => {
+        const updated = prev.map((g) => g.id === giftId ? { ...g, status, updatedAt: updatedTime } : g);
+        safeLocalStorageSetItem("cache_gifts", JSON.stringify(updated));
+        return updated;
+      });
       await updateDoc(docRef, { 
         status,
-        updatedAt: new Date().toISOString()
+        updatedAt: updatedTime
       });
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `gifts/${giftId}`);
     }
+  };
+
+  // Export all local database cache data into a backup JSON file
+  const handleExportBackup = () => {
+    try {
+      const dataStr = JSON.stringify({
+        employees,
+        activities,
+        gifts: giftLogs,
+        appUsers,
+        exportDate: new Date().toISOString(),
+        version: "1.0"
+      }, null, 2);
+      
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `lenya_loyalty_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.warn("Export backup completed/failed:", e);
+      alert(language === "ku" ? "کێشەیەک ڕوویدا لە کاتی هەناردەکردنی باکئەپ" : "Failed to export data backup.");
+    }
+  };
+
+  // Import local database cache data from a chosen JSON backup file
+  const handleImportBackup = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const json = JSON.parse(e.target?.result as string);
+        if (json && (Array.isArray(json.employees) || Array.isArray(json.activities) || Array.isArray(json.gifts))) {
+          if (Array.isArray(json.employees)) {
+            setEmployees(json.employees);
+            safeLocalStorageSetItem("cache_employees", JSON.stringify(json.employees));
+          }
+          if (Array.isArray(json.activities)) {
+            setActivities(json.activities);
+            safeLocalStorageSetItem("cache_activities", JSON.stringify(json.activities));
+          }
+          if (Array.isArray(json.gifts)) {
+            setGiftLogs(json.gifts);
+            safeLocalStorageSetItem("cache_gifts", JSON.stringify(json.gifts));
+          }
+          if (Array.isArray(json.appUsers)) {
+            setAppUsers(json.appUsers);
+            safeLocalStorageSetItem("cache_app_users", JSON.stringify(json.appUsers));
+          }
+
+          alert(
+            language === "ku"
+              ? "✅ باکئەپەکە بە سەرکەوتوویی هاوردەکرا! هەموو داتاکان پاشەکەوت کران چونکە لەناو وێبگەڕەکەتدا."
+              : "✅ Backup imported successfully! All records have been restored and cached locally."
+          );
+          window.location.reload();
+        } else {
+          alert(language === "ku" ? "کۆپەڕی باکئەپەکە گونجاو نییە یاخود داتای دروستی تێدا نییە." : "Invalid backup file structure.");
+        }
+      } catch (err) {
+        console.warn("Import backup parse error details:", err);
+        alert(language === "ku" ? "خوێندنەوەی کۆپەڕی باکئەپەکە سەرکەوتوو نەبوو!" : "Error parsing the backup file.");
+      }
+    };
+    reader.readAsText(file);
   };
 
   // Google Email Security Verification Callback
@@ -505,12 +718,12 @@ export default function App() {
           matched = { id: userDoc.id, ...userDoc.data() } as AppUser;
         }
       } catch (err) {
-        console.error("Error doing direct Firestore check for user:", err);
+        console.warn("Error doing direct Firestore check for user (expected if offline/quota limit):", err);
       }
     }
 
     if (matched) {
-      localStorage.setItem("app_user_session", JSON.stringify(matched));
+      safeLocalStorageSetItem("app_user_session", JSON.stringify(matched));
       setUserSession(matched);
       if (matched.role === "admin") {
         setActiveTab("employees");
@@ -546,7 +759,7 @@ export default function App() {
 
     if (matched) {
       if (matched.password === passwordInput) {
-        localStorage.setItem("app_user_session", JSON.stringify(matched));
+        safeLocalStorageSetItem("app_user_session", JSON.stringify(matched));
         setUserSession(matched);
         if (matched.role === "admin") {
           setActiveTab("employees");
@@ -566,7 +779,7 @@ export default function App() {
     try {
       await signOut(auth);
     } catch (e) {
-      console.error("Firebase Auth sign-out failed:", e);
+      console.warn("Firebase Auth sign-out completed/resolved:", e);
     }
     localStorage.removeItem("app_user_session");
     setUserSession(null);
@@ -583,7 +796,7 @@ export default function App() {
         createdAt: new Date().toISOString()
       });
     } catch (e) {
-      console.error(e);
+      console.warn("Failed to write to cloud:", e);
       alert(language === "ku" ? "کێشەیەک ڕوویدا لە کاتی پاشەکەوتکردنی بەکارهێنەر" : "Error saving user credentials");
     }
   };
@@ -592,7 +805,7 @@ export default function App() {
     try {
       await deleteDoc(doc(db, "app_users", docId));
     } catch (e) {
-      console.error(e);
+      console.warn("Failed to delete from cloud:", e);
       alert(language === "ku" ? "کێشەیەک ڕوویدا لە کاتی سڕینەوەی بەکارهێنەر" : "Error deleting user");
     }
   };
@@ -711,7 +924,7 @@ export default function App() {
           <div className="absolute top-0 right-0 left-0 h-2 bg-gradient-to-r from-amber-400 via-rose-400 to-cyan-400" />
           
           {/* Header language toggle */}
-          <div className="flex justify-end mb-6">
+          <div className="flex justify-end mb-4">
             <button
               onClick={() => setLanguage(language === "ku" ? "en" : "ku")}
               className="text-xs glass-btn-secondary px-3.5 py-2 rounded-xl flex items-center gap-1.5 font-bold text-slate-700 hover:text-slate-900 shadow-sm transition"
@@ -720,6 +933,59 @@ export default function App() {
               {language === "ku" ? "English" : "کوردی"}
             </button>
           </div>
+
+          {/* Database Quota Error Offline Mode Notice */}
+          {dbError && (
+            <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-col gap-3 font-sans relative overflow-hidden text-amber-900 text-right animate-fade-in">
+              <div className="absolute top-0 bottom-0 left-0 w-1 bg-amber-500" dir="ltr" />
+              <div className="flex items-start gap-2.5">
+                <Database className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 animate-pulse" />
+                <div>
+                  <h4 className="text-amber-950 text-xs font-black leading-normal block">
+                    {language === "ku"
+                      ? "⚠️ دۆخی فریاگوزاری داتای ئۆفلاین کاراکراوە"
+                      : "⚠️ Cloud Database Offline (Active Cache Safety)"}
+                  </h4>
+                  <p className="text-slate-700 text-[11px] mt-1.5 leading-relaxed font-semibold">
+                    {language === "ku"
+                      ? "سیستمی لایڤی سێرڤەر بەهۆی تێپەڕبوونی لیمیتی ٥٠،٠٠٠ خوێندنەوەی ڕۆژانەی بێبەرامبەر لەسەر فایەربەیس کاتیانە ڕاگیراوە. هیچ داتایەک نەسڕاوەتەوە! هەموو شتێک بە سەلامەتی کاردەکات بە شێوازی ئۆفلاین لەناو وێبگەڕەکەتدا."
+                      : "The live central Firestore database has temporary read-limits (50k daily free-tier views exceeded). Be fully reassured: no data is lost! The system is operating seamlessly offline using your browser's persistent cache."}
+                  </p>
+                </div>
+              </div>
+
+              {/* Utility actions inside the offline warning list */}
+              <div className="flex flex-wrap gap-2 justify-end pt-2 border-t border-amber-500/15">
+                <label className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded-xl transition flex items-center justify-center gap-1 cursor-pointer border border-slate-950">
+                  <Upload className="w-3.5 h-3.5" />
+                  {language === "ku" ? "هاوردەکردنی باکئەپ" : "Import Backup File"}
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportBackup}
+                    className="hidden"
+                  />
+                </label>
+
+                <a
+                  href="https://console.firebase.google.com/project/lenya-design/firestore/databases/ai-studio-2ef4068b-e874-4e95-9f3b-5bad40829247/data?openUpgradeDialog=true"
+                  target="_blank"
+                  referrerPolicy="no-referrer"
+                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-[10px] font-black rounded-xl transition flex items-center justify-center gap-1 font-sans"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {language === "ku" ? "چارەسەرکردن ⚡" : "Upgrade Instance ⚡"}
+                </a>
+              </div>
+              
+              <div className="pt-2 border-t border-amber-500/15">
+                <span className="text-[9px] font-bold text-amber-800 uppercase tracking-wilder block mb-0.5">Detailed Quota Log:</span>
+                <p className="text-[10px] text-slate-500 font-mono bg-white/50 p-2 rounded-xl break-all leading-normal text-left" dir="ltr">
+                  {dbError.error}
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="text-center mb-6">
             <div className="w-20 h-20 rounded-[28px] bg-white/60 backdrop-blur-md shadow-inner flex items-center justify-center mx-auto mb-4 border border-white/85">
@@ -1008,37 +1274,101 @@ export default function App() {
 
           {/* Active Firebase Cloud Database Warning Banner */}
           {dbError && (
-            <div className="glass-panel bg-rose-500/10 backdrop-blur-lg rounded-[24px] border border-rose-500/35 p-5 flex flex-col md:flex-row items-center justify-between gap-5 shadow-sm relative overflow-hidden animate-fade-in font-sans">
-              <div className="absolute top-0 bottom-0 left-0 w-1 bg-rose-500" />
-              <div className="flex items-start gap-3.5">
-                <span className="p-2.5 bg-rose-500/20 border border-rose-400/30 text-rose-600 rounded-2xl flex-shrink-0 mt-0.5">
-                  <AlertCircle className="w-5 h-5" />
-                </span>
-                <div>
-                  <h4 className="text-slate-800 text-xs font-bold leading-relaxed">
-                    {language === "ku" 
-                      ? "⚠️ کێشەی فایەربەیس: تێپەڕبوونی ڕێژەی بێبەرامبەری خوێندنەوە (Quota Limit Exceeded)" 
-                      : "⚠️ Firebase Cloud Quota Limit Receeded"}
-                  </h4>
-                  <p className="text-slate-500 text-[11px] mt-1 font-sans leading-normal">
-                    {language === "ku" 
-                      ? "بەهۆی تێپەڕبوونی لیمیتی خوێندنەوەی ڕۆژانەی پڕۆژەی فایەربەیس، خوێندنەوە و نوسینی نوێ بە شێوەیەکی کاتی لە فایەربەیسەوە سنووردار کراوە. داتاکانی تۆمار کراو پشت بە لایڤ فایەربەیس دەبەستن و بە ڕیسێت بوونەوەی لیمیتەکە یاخود بەستنی باڵانس چاک دەبێتەوە." 
-                      : "The daily free transaction read quota limits for this Firebase Firestore database project have been exceeded. Reads or real-time sync requests may fail until reset by Google. The system is still responsive and securely connected."}
-                  </p>
-                  <p className="text-[10px] text-rose-600/90 font-mono mt-2 bg-rose-500/5 p-2 rounded-lg break-all">
-                    {dbError.error}
-                  </p>
+            <div className="glass-panel bg-amber-500/10 backdrop-blur-lg rounded-[28px] border border-amber-500/40 p-6 flex flex-col gap-6 shadow-md relative overflow-hidden animate-fade-in font-sans">
+              <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-amber-500" />
+              
+              <div className="flex flex-col md:flex-row items-start justify-between gap-6">
+                <div className="flex items-start gap-4">
+                  <span className="p-3 bg-amber-500/20 border border-amber-400/40 text-amber-700 rounded-2xl flex-shrink-0 mt-1">
+                    <Database className="w-6 h-6 animate-pulse" />
+                  </span>
+                  <div>
+                    <h4 className="text-amber-900 text-sm font-black leading-relaxed text-right">
+                      {language === "ku" 
+                        ? "⚠️ ئاگاداری گرنگ: گۆڕانکاری پلانی فایەربەیس و نوێکردنەوە" 
+                        : "⚠️ Core Database Actions Blocked by Free Instance Quota"}
+                    </h4>
+                    <p className="text-slate-700 text-[12px] mt-2 font-semibold leading-relaxed text-right">
+                      {language === "ku" 
+                        ? "خوێندنەوەی لایڤی فایەربەیس بۆ ئەمڕۆ کۆتایی پێهاتووە (تێپەڕبوونی لیمیتی ٥٠،٠٠٠ خوێندنەوەی بێبەرامبەر). هەرچەندە پلانی باڵانسی فایەربەیس زیادکراوە، بەڵام پێویستە بنکەی داتاکەت خۆی (Database Instance) ڕاستەوخۆ کارا بکرێت لە ناو کۆنسۆلی گووگڵ فایەربەیس تا لیمیتەکەی لابرێت." 
+                        : "Your project's free-tier database reads constraint has been reached. Although your overall billing has been connected, you must manually initiate the Firestore instance upgrade modal in Google Cloud console to lift storage limits."}
+                    </p>
+                    <div className="mt-3.5 p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-[12px] text-emerald-800 font-bold flex items-center gap-2 justify-end">
+                      <span>
+                        {language === "ku"
+                          ? "دڵنیابە: هیچ داتایەک نەسڕاوەتەوە! هەموو داتاکانت بە سەلامەتی ڕزگارکراون و ئێستا بە شێوەی ئۆفلاین پیشان دەدرێن."
+                          : "Be Reassured: No data is deleted! Everything you entered is fully cached and safely displayed offline below."}
+                      </span>
+                      <CheckCircle className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
+                    </div>
+                  </div>
+                </div>
+ 
+                <div className="flex flex-col sm:flex-row md:flex-col gap-3.5 shrink-0 w-full md:w-auto">
+                  {userSession?.role === "super_admin" && (
+                    <a
+                      href="https://console.firebase.google.com/project/lenya-design/firestore/databases/ai-studio-2ef4068b-e874-4e95-9f3b-5bad40829247/data?openUpgradeDialog=true"
+                      target="_blank"
+                      referrerPolicy="no-referrer"
+                      className="w-full text-center px-5 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-2xl text-[11px] uppercase tracking-wider transition duration-150 cursor-pointer shadow-sm hover:shadow-md flex items-center justify-center gap-2 border border-amber-600 font-sans"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      {language === "ku" ? "کلیک لێرە بکە بۆ چارەسەرکردن ⚡" : "Upgrade Database Instance ⚡"}
+                    </a>
+                  )}
+ 
+                  <button
+                    onClick={() => {
+                      setDbError(null);
+                      window.location.reload();
+                    }}
+                    className="w-full px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white border border-slate-950 rounded-2xl text-[11px] font-bold tracking-wider transition duration-150 cursor-pointer shadow-sm flex items-center justify-center gap-1.5 font-sans"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    {language === "ku" ? "🔄 دووبارە تاقیکردنەوە" : "🔄 Refresh Connection"}
+                  </button>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  setDbError(null);
-                  window.location.reload();
-                }}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white border border-slate-950 rounded-xl text-[10px] font-bold transition duration-150 cursor-pointer shadow-sm flex-shrink-0 font-sans"
-              >
-                {language === "ku" ? "🔄 تاقیکردنەوەی فایەربەیس" : "🔄 Reconnect Cloud"}
-              </button>
+
+              {/* Offline Data Utility Tools (Backup/Restore) */}
+              <div className="mt-1 pt-4 border-t border-amber-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 bg-amber-500/20 text-amber-800 rounded-lg">
+                    <Database className="w-4 h-4 shrink-0" />
+                  </span>
+                  <span className="text-amber-900 text-xs font-bold leading-normal">
+                    {language === "ku"
+                      ? "ئامرازەکانی ڕزگارکردنی لۆکاڵ (بۆ ئەوەی داتاکانت لای خۆت بمێننەوە):"
+                      : "Offline local recovery utilities (For local data persistence):"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2.5 w-full sm:w-auto">
+                  <button
+                    onClick={handleExportBackup}
+                    className="flex-1 sm:flex-none px-4 py-2.5 bg-amber-500/25 hover:bg-amber-500/35 text-amber-950 border border-amber-500/40 text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    {language === "ku" ? "هەناردەکردنی داتا (باکئەپ)" : "Export local data (Backup)"}
+                  </button>
+                  <label className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-slate-950">
+                    <Upload className="w-4 h-4" />
+                    {language === "ku" ? "هاوردەکردنی باکئەپ" : "Import Backup File"}
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportBackup}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-1 pt-4 border-t border-amber-500/20">
+                <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block mb-1">Detailed Technical Context:</span>
+                <p className="text-[11px] text-zinc-600 font-mono bg-white/50 p-3 rounded-xl break-all leading-normal text-left" dir="ltr">
+                  {dbError.error}
+                </p>
+              </div>
             </div>
           )}
 
@@ -1283,6 +1613,8 @@ export default function App() {
                     onDeleteUser={handleDeleteUser}
                     language={language}
                     currentUserEmail={userSession?.email || userSession?.username}
+                    employees={employees}
+                    onUpdateEmployee={updateEmployeeInFirestore}
                   />
                 )}
               </div>

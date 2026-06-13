@@ -16,6 +16,7 @@ import {
   Download
 } from "lucide-react";
 import { AlertNotification, GiftLog, Employee, BusinessId, BUSINESSES } from "../types";
+import { formatDateToDDMMYYYY } from "../utils";
 
 const getWhatsAppLink = (phone: string, name: string, type: "birthday" | "marriage_anniversary" | "work_anniversary", language: "ku" | "en") => {
   if (!phone) return "";
@@ -116,7 +117,7 @@ export default function AlertsPanel({
         </head>
         <body>
           <h1>${isKu ? "دۆسیەی کارمەندان - ڕاپۆرتی بۆنە نزیکەکان" : "Staff Loyalty Hub - Nearby Milestones & Gift Plan"}</h1>
-          <p><strong>${isKu ? "ڕێکەوتی جێبەجێکردن:" : "Generated On:"}</strong> ${systemDate || "2026-05-25"}</p>
+          <p><strong>${isKu ? "ڕێکەوتی جێبەجێکردن:" : "Generated On:"}</strong> ${formatDateToDDMMYYYY(systemDate || "2026-05-25")}</p>
           <table>
             <thead>
               <tr>
@@ -135,7 +136,7 @@ export default function AlertsPanel({
                   <td><strong>${al.employeeName}</strong></td>
                   <td>${getBusinessLabel(al.business)}</td>
                   <td>${al.type === "birthday" ? (isKu ? "رۆژی لەدایکبوون 🎂" : "Birthday 🎂") : al.type === "marriage_anniversary" ? (isKu ? "ساڵیادی هاوسەرگیری 💍" : "Wedding Anniversary 💍") : (isKu ? "ساڵیادی دامەزراندن 🏆" : "Work Anniversary 🏆")}</td>
-                  <td><span class="date">${al.actualDate}</span></td>
+                  <td><span class="date">${formatDateToDDMMYYYY(al.actualDate)}</span></td>
                   <td><strong>${al.daysRemaining === 0 ? (isKu ? "ئەمڕۆ!" : "Today!") : al.daysRemaining === 1 ? (isKu ? "سبەی!" : "Tomorrow!") : al.daysRemaining === -1 ? (isKu ? "دوێنێ بوو!" : "Yesterday!") : al.daysRemaining === -2 ? (isKu ? "پێش ٢ ڕۆژ بوو!" : "2 days ago") : (isKu ? `${al.daysRemaining} ڕۆژ` : `${al.daysRemaining} days`)}</strong></td>
                 </tr>
               `).join("")}
@@ -310,7 +311,7 @@ export default function AlertsPanel({
             )}
             <span className="self-start md:self-center bg-white/60 border border-slate-200/60 text-slate-700 text-xs font-mono font-bold px-3 py-1.5 rounded-xl flex items-center gap-2 shadow-sm select-none">
               <Clock className="w-3.5 h-3.5 text-slate-450" />
-              {systemDate || "2026-05-25"} {language === "ku" ? "(ڕێکەوتی سیستەم)" : "(System Date)"}
+              {formatDateToDDMMYYYY(systemDate || "2026-05-25")} {language === "ku" ? "(ڕێکەوتی سیستەم)" : "(System Date)"}
             </span>
           </div>
         </div>
@@ -544,7 +545,7 @@ export default function AlertsPanel({
                           <span className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold ${
                             log.occasionType === "birthday" ? "bg-amber-500/10 border-amber-500/10 text-amber-700" : "bg-purple-500/10 border-purple-500/10 text-purple-700"
                           }`}>
-                            {log.occasionType === "birthday" ? t.birthday : t.anniversary} ({log.occasionDate})
+                            {log.occasionType === "birthday" ? t.birthday : t.anniversary} ({formatDateToDDMMYYYY(log.occasionDate)})
                           </span>
                         </td>
                         <td className="py-4 px-4 text-right max-w-xs text-xs text-slate-700 font-sans break-words font-medium">
@@ -642,7 +643,7 @@ export default function AlertsPanel({
                         <span className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold ${
                           log.occasionType === "birthday" ? "bg-amber-500/10 border-amber-500/10 text-amber-700" : "bg-purple-500/10 border-purple-500/10 text-purple-700"
                         }`}>
-                          {log.occasionType === "birthday" ? t.birthday : t.anniversary} ({log.occasionDate})
+                          {log.occasionType === "birthday" ? t.birthday : t.anniversary} ({formatDateToDDMMYYYY(log.occasionDate)})
                         </span>
                       </div>
                       <div className="flex flex-col gap-1 mt-1">

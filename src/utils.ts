@@ -196,3 +196,44 @@ export const PRESET_ACTIVITIES: Record<string, PresetActivity> = {
 export function getFallbackActivity(monthNum: string): PresetActivity {
   return PRESET_ACTIVITIES[monthNum] || PRESET_ACTIVITIES["05"];
 }
+
+/**
+ * Safely converts a date string formatted as "YYYY-MM-DD" or similar into Kurdish/International "DD/MM/YYYY" format.
+ */
+export function formatDateToDDMMYYYY(dateStr: string | null | undefined): string {
+  if (!dateStr) return "-";
+  // Handling ISO string like "2026-06-11T12:00:00Z"
+  const cleanStr = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
+  
+  if (cleanStr.includes("-")) {
+    const parts = cleanStr.split("-");
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+      if (parts[2].length === 4) {
+        return `${parts[0]}/${parts[1]}/${parts[2]}`;
+      }
+    } else if (parts.length === 2) {
+      // Like "MM-DD" (e.g. "05-27") -> "27/05"
+      if (parts[0].length <= 2 && parts[1].length <= 2) {
+        return `${parts[1]}/${parts[0]}`;
+      }
+    }
+  } else if (cleanStr.includes("/")) {
+    const parts = cleanStr.split("/");
+    if (parts.length === 3) {
+      if (parts[0].length === 4) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+      return cleanStr;
+    } else if (parts.length === 2) {
+      // Like "MM/DD" (e.g. "05/27") -> "27/05"
+      if (parts[0].length <= 2 && parts[1].length <= 2) {
+        return `${parts[1]}/${parts[0]}`;
+      }
+    }
+  }
+  return dateStr;
+}
+

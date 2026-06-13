@@ -29,7 +29,9 @@ import {
   FileText
 } from "lucide-react";
 import { Employee, BusinessId, BUSINESSES, MaritalStatus, EmployeeStatus } from "../types";
+import { formatDateToDDMMYYYY } from "../utils";
 import ImageCropper from "./ImageCropper";
+import { compressImageBase64 } from "../utils/imageCompression";
 
 interface ExportField {
   id: string;
@@ -466,7 +468,7 @@ export default function EmployeeDirectory({
     setActiveDocCamera(null);
   };
 
-  const captureDocPhoto = (type: "passport" | "iqama") => {
+  const captureDocPhoto = async (type: "passport" | "iqama") => {
     const videoElement = document.getElementById(`doc-camera-stream-${type}`) as HTMLVideoElement;
     if (videoElement) {
       const canvas = document.createElement("canvas");
@@ -475,11 +477,12 @@ export default function EmployeeDirectory({
       const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        const compressed = await compressImageBase64(dataUrl, 800, 800, 0.6);
         if (type === "passport") {
-          setFormData((prev) => ({ ...prev, passportOrNationalCardUrl: dataUrl }));
+          setFormData((prev) => ({ ...prev, passportOrNationalCardUrl: compressed }));
         } else {
-          setFormData((prev) => ({ ...prev, iqamaUrl: dataUrl }));
+          setFormData((prev) => ({ ...prev, iqamaUrl: compressed }));
         }
         stopDocCamera();
       }
@@ -779,7 +782,7 @@ export default function EmployeeDirectory({
                   </div>
                   <div>
                     <div className="text-[8px] font-extrabold text-slate-400 uppercase tracking-widest mb-0.5">{language === "ku" ? "ڕێکەوتی دامەزراندن" : "Onboarding"}</div>
-                    <div className="font-bold text-slate-700 font-sans">{emp.hireDate || "-"}</div>
+                    <div className="font-bold text-slate-700 font-sans">{formatDateToDDMMYYYY(emp.hireDate)}</div>
                   </div>
                 </div>
               </div>
@@ -798,7 +801,7 @@ export default function EmployeeDirectory({
                   <div className="space-y-1.5 text-[10px] font-semibold">
                     <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
                       <span className="text-slate-400">{language === "ku" ? "ڕێکەوتی لەدایکبوون" : "Birth Date"}</span>
-                      <span className="text-slate-800 font-sans">{emp.birthDate || "-"}</span>
+                      <span className="text-slate-800 font-sans">{formatDateToDDMMYYYY(emp.birthDate)}</span>
                     </div>
                     
                     <div className="flex items-center justify-between py-1 border-b border-slate-100/50">
@@ -811,7 +814,7 @@ export default function EmployeeDirectory({
                     {isMarried && emp.marriageAnniversary && (
                       <div className="flex items-center justify-between py-1 border-b border-slate-100/50 bg-amber-500/[0.02] px-2 rounded-md border border-amber-500/10">
                         <span className="text-amber-800 font-bold">{language === "ku" ? "ڕۆژی هاوسەرگیری" : "Wedding Anniv."}</span>
-                        <span className="text-amber-900 font-sans font-bold">{emp.marriageAnniversary}</span>
+                        <span className="text-amber-900 font-sans font-bold">{formatDateToDDMMYYYY(emp.marriageAnniversary)}</span>
                       </div>
                     )}
 
@@ -960,7 +963,7 @@ export default function EmployeeDirectory({
                 <div className="space-y-1">
                   <div className="flex justify-between border-b border-slate-100 pb-0.5">
                     <span className="text-slate-400">{language === "ku" ? "لەدایکبوون" : "Birth"}</span>
-                    <span className="font-semibold font-sans">{emp.birthDate || "-"}</span>
+                    <span className="font-semibold font-sans">{formatDateToDDMMYYYY(emp.birthDate)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">{language === "ku" ? "خێزانی" : "Marital"}</span>
@@ -1054,8 +1057,8 @@ export default function EmployeeDirectory({
             <div className="space-y-0.5 text-[8.5px] text-slate-700 bg-slate-50 p-1 rounded-lg border border-slate-100/50">
               {pdfConfig.showPersonalDetails && (
                 <div className="flex justify-between leading-none py-0.5">
-                  <span className="text-slate-450">{language === "ku" ? "لەدایکبوون" : "Birth"}</span>
-                  <span className="font-bold text-slate-700 font-sans">{emp.birthDate || "-"}</span>
+                  <span className="text-slate-455">{language === "ku" ? "لەدایکبوون" : "Birth"}</span>
+                  <span className="font-bold text-slate-700 font-sans">{formatDateToDDMMYYYY(emp.birthDate)}</span>
                 </div>
               )}
               {pdfConfig.showEmergencyContact && emp.emergencyContactPhone && (
@@ -1342,7 +1345,7 @@ export default function EmployeeDirectory({
                           {emp.role}
                           {emp.hireDate && (
                             <span className="text-[10px] text-slate-400 font-mono font-medium ml-1.5 whitespace-nowrap">
-                              ({emp.hireDate}) ({formatServiceTenure(emp.hireDate, language)})
+                              ({formatDateToDDMMYYYY(emp.hireDate)}) ({formatServiceTenure(emp.hireDate, language)})
                             </span>
                           )}
                         </p>
@@ -1389,7 +1392,7 @@ export default function EmployeeDirectory({
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
                         {t.birthDate}
                       </span>
-                      <span className="font-mono text-slate-800 font-bold">{emp.birthDate}</span>
+                      <span className="font-mono text-slate-800 font-bold">{formatDateToDDMMYYYY(emp.birthDate)}</span>
                     </div>
 
                     <div className="flex items-center justify-between">
@@ -1409,14 +1412,14 @@ export default function EmployeeDirectory({
                     {emp.maritalStatus === "married" && emp.marriageAnniversary && (
                       <div className="flex items-center justify-between bg-rose-500/5 p-2 rounded-xl border border-dashed border-rose-200/50 text-[11px]">
                         <span className="text-rose-700 font-extrabold">{t.marriageAnniversary}</span>
-                        <span className="font-mono text-rose-800 font-black">{emp.marriageAnniversary}</span>
+                        <span className="font-mono text-rose-800 font-black">{formatDateToDDMMYYYY(emp.marriageAnniversary)}</span>
                       </div>
                     )}
 
                     <div className="flex flex-col gap-1.5 bg-slate-50 p-2.5 rounded-2xl border border-slate-100 mt-1">
                       <div className="flex items-center justify-between text-[11px] font-sans">
                         <span className="text-slate-500 font-bold">{t.hireDate}</span>
-                        <span className="font-mono text-slate-700 font-black">{emp.hireDate}</span>
+                        <span className="font-mono text-slate-700 font-black">{formatDateToDDMMYYYY(emp.hireDate)}</span>
                       </div>
                       
                       {(() => {
@@ -2139,8 +2142,9 @@ export default function EmployeeDirectory({
                                   const file = e.target.files?.[0];
                                   if (file) {
                                     const reader = new FileReader();
-                                    reader.onloadend = () => {
-                                      setFormData((prev) => ({ ...prev, passportOrNationalCardUrl: reader.result as string }));
+                                    reader.onloadend = async () => {
+                                      const compressed = await compressImageBase64(reader.result as string, 800, 800, 0.6);
+                                      setFormData((prev) => ({ ...prev, passportOrNationalCardUrl: compressed }));
                                     };
                                     reader.readAsDataURL(file);
                                   }
@@ -2269,8 +2273,9 @@ export default function EmployeeDirectory({
                                   const file = e.target.files?.[0];
                                   if (file) {
                                     const reader = new FileReader();
-                                    reader.onloadend = () => {
-                                      setFormData((prev) => ({ ...prev, iqamaUrl: reader.result as string }));
+                                    reader.onloadend = async () => {
+                                      const compressed = await compressImageBase64(reader.result as string, 800, 800, 0.6);
+                                      setFormData((prev) => ({ ...prev, iqamaUrl: compressed }));
                                     };
                                     reader.readAsDataURL(file);
                                   }
@@ -2383,8 +2388,9 @@ export default function EmployeeDirectory({
                   imageSrc={imageToCrop}
                   language={language}
                   onCancel={() => setImageToCrop(null)}
-                  onCrop={(croppedData) => {
-                    setFormData((prev) => ({ ...prev, photoUrl: croppedData }));
+                  onCrop={async (croppedData) => {
+                    const compressed = await compressImageBase64(croppedData, 300, 300, 0.55);
+                    setFormData((prev) => ({ ...prev, photoUrl: compressed }));
                     setImageToCrop(null);
                   }}
                 />

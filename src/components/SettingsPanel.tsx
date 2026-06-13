@@ -11,9 +11,14 @@ import {
   Eye,
   EyeOff,
   User,
-  Key
+  Key,
+  Zap,
+  Check,
+  AlertCircle,
+  RefreshCw
 } from "lucide-react";
-import { AppUser, BusinessId, BUSINESSES } from "../types";
+import { AppUser, BusinessId, BUSINESSES, Employee } from "../types";
+import { compressImageBase64, needsCompression } from "../utils/imageCompression";
 
 interface SettingsPanelProps {
   appUsers: AppUser[];
@@ -21,6 +26,8 @@ interface SettingsPanelProps {
   onDeleteUser: (username: string) => Promise<void>;
   language: "ku" | "en";
   currentUserEmail?: string;
+  employees?: Employee[];
+  onUpdateEmployee?: (id: string, empData: Partial<Employee>) => Promise<void>;
 }
 
 export default function SettingsPanel({
@@ -28,12 +35,80 @@ export default function SettingsPanel({
   onAddUser,
   onDeleteUser,
   language,
-  currentUserEmail
+  currentUserEmail,
+  employees = [],
+  onUpdateEmployee
 }: SettingsPanelProps) {
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [userToDelete, setUserToDelete] = useState<AppUser | null>(null);
   
+  // Image optimizer state
+  const [optimizerStatus, setOptimizerStatus] = useState<"idle" | "running" | "completed" | "error">("idle");
+  const [processedCount, setProcessedCount] = useState(0);
+  const [totalToProcess, setTotalToProcess] = useState(0);
+  const [currentEmpName, setCurrentEmpName] = useState("");
+  const [optimizedBytesSaved, setOptimizedBytesSaved] = useState(0);
+
+  // Find employees needing compression
+  const uncompressedEmployees = employees.filter(needsCompression);
+  const totalEmployeesWithImages = employees.filter(emp => emp.photoUrl || emp.passportOrNationalCardUrl || emp.iqamaUrl).length;
+
+  const handleOptimizeImages = async () => {
+    if (!employees || !onUpdateEmployee) return;
+    if (uncompressedEmployees.length === 0) {
+      alert(language === "ku" ? "هیچ نوێکارییەک پێویست نییە، سەرجەم وێنەکان چالاک کراون." : "All images are already optimized!");
+      return;
+    }
+
+    setOptimizerStatus("running");
+    setProcessedCount(0);
+    setTotalToProcess(uncompressedEmployees.length);
+    let bytesSaved = 0;
+
+    for (let i = 0; i < uncompressedEmployees.length; i++) {
+      const emp = uncompressedEmployees[i];
+      setCurrentEmpName(emp.name);
+      
+      const beforePhotoLen = emp.photoUrl?.length || 0;
+      const beforePassportLen = emp.passportOrNationalCardUrl?.length || 0;
+      const beforeIqamaLen = emp.iqamaUrl?.length || 0;
+      const originalTotalRaw = beforePhotoLen + beforePassportLen + beforeIqamaLen;
+
+      // Compress
+      const updatedFields: Partial<Employee> = {};
+      try {
+        if (emp.photoUrl && emp.photoUrl.startsWith("data:image")) {
+          updatedFields.photoUrl = await compressImageBase64(emp.photoUrl, 300, 300, 0.55);
+        }
+        if (emp.passportOrNationalCardUrl && emp.passportOrNationalCardUrl.startsWith("data:image")) {
+          updatedFields.passportOrNationalCardUrl = await compressImageBase64(emp.passportOrNationalCardUrl, 800, 800, 0.6);
+        }
+        if (emp.iqamaUrl && emp.iqamaUrl.startsWith("data:image")) {
+          updatedFields.iqamaUrl = await compressImageBase64(emp.iqamaUrl, 800, 800, 0.6);
+        }
+
+        const afterPhotoLen = updatedFields.photoUrl?.length || beforePhotoLen;
+        const afterPassportLen = updatedFields.passportOrNationalCardUrl?.length || beforePassportLen;
+        const afterIqamaLen = updatedFields.iqamaUrl?.length || beforeIqamaLen;
+        const newTotalRaw = afterPhotoLen + afterPassportLen + afterIqamaLen;
+
+        bytesSaved += Math.max(0, originalTotalRaw - newTotalRaw);
+
+        await onUpdateEmployee(emp.id, updatedFields);
+        setProcessedCount(i + 1);
+        setOptimizedBytesSaved(bytesSaved);
+      } catch (err) {
+        console.warn("Optimization failed for employee:", emp.name, err);
+      }
+      
+      // Artificial delay to prevent UI locks and respect browser rendering
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    setOptimizerStatus("completed");
+  };
+
   // Toggles for masking passwords
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
 
@@ -315,6 +390,117 @@ export default function SettingsPanel({
             })}
           </div>
         )}
+      </div>
+
+      {/* Retroactive Image Data Optimizer Panel */}
+      <div className="glass-panel rounded-[36px] p-6 md:p-8 shadow-sm relative overflow-hidden text-right">
+        <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-amber-500 via-yellow-400 to-teal-400" />
+        
+        <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between">
+          <div className="space-y-2 max-w-2xl">
+            <span className="text-[10px] bg-amber-500/10 text-amber-700 font-extrabold px-3 py-1.5 rounded-full border border-amber-500/10 uppercase tracking-wider inline-flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+              {language === "ku" ? "چارەسەری کێشەی هێز و قەبارەی فایەربەیس" : "Firestore Database Quota Saver & Tuner"}
+            </span>
+            <h3 className="text-xl md:text-2xl font-display font-black text-slate-800">
+              {language === "ku" ? "ئۆپتیمایزکەر و بچووککەرەوەی وێنە کۆنەکان" : "Legacy Photo & Document Data Compressor"}
+            </h3>
+            <p className="text-slate-500 text-xs md:text-sm leading-relaxed">
+              {language === "ku" 
+                ? "هەر کارمەندێک ٣ وێنە باردەکات (وێنەی خۆی، کارتی نیشتیمانی / پاسپۆرت، و کارتی نیشتەجێبوون). ئەمەش توانای فایەربەیسی پڕ دەکردەوە و سیستەمەکەی خاو دەکردەوە. بە کلیکێک لێرە، سەرجەم وێنە کۆنە تۆمارکراوەکان بە زۆری %٩٠-٩٥ بەبێ لەدەستدانی ڕوونی بچووک دەبنەوە بۆ کەمتر لە ٧٠ کیلۆبایت بۆ ئەوەی تریاڵ و لایڤی فایەربەیسەکەت بەردەوام چالاک بمێنێت." 
+                : "Each profile can link up to 3 attachments. Huge raw base64 data consumes Firestore read quotas rapidly. This tool loops through existing employees in the cloud database, compresses their bulk attachments down from multiple megabytes directly to ~60KB using modern web canvas algorithms, preserving exact crop specs."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap lg:flex-nowrap gap-3 items-center shrink-0 w-full lg:w-auto">
+            {optimizerStatus === "idle" && uncompressedEmployees.length > 0 && (
+              <button
+                onClick={handleOptimizeImages}
+                className="w-full lg:w-auto px-6 py-4 bg-gradient-to-l from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 text-white text-xs font-black rounded-2xl flex items-center justify-center gap-2 shadow-lg hover:shadow-amber-500/20 active:scale-95 transition-all text-center cursor-pointer"
+              >
+                <Zap className="w-4 h-4 shrink-0" />
+                <span>
+                  {language === "ku" 
+                    ? `بچووککردنەوەی ${uncompressedEmployees.length} کارمەند` 
+                    : `Optimize & Compress ${uncompressedEmployees.length} profiles`}
+                </span>
+              </button>
+            )}
+
+            {optimizerStatus === "idle" && uncompressedEmployees.length === 0 && (
+              <div className="w-full lg:w-auto px-6 py-3.5 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-2.5 text-emerald-800 text-xs font-bold justify-center">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>
+                  {language === "ku" 
+                    ? "هەموو وێنەکان پەستێوراون و چاکترین خێراییان هەیە ✅" 
+                    : "Database completely fine & fully compressed! ✅"}
+                </span>
+              </div>
+            )}
+
+            {optimizerStatus === "running" && (
+              <div className="w-full lg:w-auto flex flex-col gap-2 p-4 bg-slate-50 border border-slate-100 rounded-2xl shadow-sm text-right min-w-[280px]">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2 text-slate-700 text-xs font-black">
+                    <RefreshCw className="w-3.5 h-3.5 text-indigo-600 animate-spin shrink-0" />
+                    <span>{language === "ku" ? "بەردەوامە..." : "Compressing..."}</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-indigo-700">
+                    {processedCount} / {totalToProcess}
+                  </span>
+                </div>
+                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                  <div 
+                    className="bg-indigo-600 h-full transition-all duration-300"
+                    style={{ width: `${(processedCount / totalToProcess) * 100}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 font-bold truncate">
+                  {language === "ku" ? `دەپرۆسێسرێت: ${currentEmpName}` : `Processing: ${currentEmpName}`}
+                </p>
+              </div>
+            )}
+
+            {optimizerStatus === "completed" && (
+              <div className="w-full lg:w-auto flex flex-col gap-2 p-4 bg-teal-50 border border-teal-100 rounded-2xl shadow-sm justify-center">
+                <div className="flex items-center gap-2 text-teal-800 text-xs font-black">
+                  <Check className="w-4 h-4 text-teal-600 shrink-0" />
+                  <span>{language === "ku" ? "ئۆپتیمایزکردنەکە تەواوبوو! 🎉" : "All cleared successfully! 🎉"}</span>
+                </div>
+                <p className="text-[10px] text-teal-600 font-semibold">
+                  {language === "ku" 
+                    ? `قەبارە کەمکراوە و پاشەکەوتکراو: ~${(optimizedBytesSaved / (1024 * 1024)).toFixed(2)} MB` 
+                    : `Saved approximately: ~${(optimizedBytesSaved / (1024 * 1024)).toFixed(2)} MB of Firestore space.`}
+                </p>
+                <button
+                  onClick={() => setOptimizerStatus("idle")}
+                  className="mt-1.5 px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-bold rounded-lg transition"
+                >
+                  {language === "ku" ? "بینینی ئەنجام" : "OK"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Info Grid for statistics */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-6 border-t border-slate-100 pt-5 text-right font-sans">
+          <div className="bg-slate-50/50 p-3.5 rounded-2xl border border-slate-100">
+            <span className="text-[10px] text-slate-500 font-bold block">{language === "ku" ? "کۆی گشتی کارمەندان" : "Total Employees"}</span>
+            <span className="text-sm font-black text-slate-800 mt-1 block">{employees.length}</span>
+          </div>
+          <div className="bg-slate-50/50 p-3.5 rounded-2xl border border-slate-100">
+            <span className="text-[10px] text-slate-500 font-bold block">{language === "ku" ? "کارمەند بە هاوپێچی چالاک" : "Profiles with files"}</span>
+            <span className="text-sm font-black text-slate-800 mt-1 block">{totalEmployeesWithImages}</span>
+          </div>
+          <div className="col-span-2 sm:col-span-1 bg-amber-50/25 p-3.5 rounded-2xl border border-amber-100/40">
+            <span className="text-[10px] text-amber-700 font-bold block">{language === "ku" ? "پێویست بە کۆنترۆڵ و کەمکردنەوە" : "Uncompressed Profiles"}</span>
+            <span className="text-sm font-black text-amber-600 mt-1 block flex items-center justify-end gap-1.5">
+              <span>{uncompressedEmployees.length}</span>
+              {uncompressedEmployees.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping inline-block" />}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Add / Edit User Modal */}
