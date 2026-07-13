@@ -22,6 +22,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Sent messages rules
+    match /messages/{messageId} {
+      allow read, write: if true;
+    }
+
     // App Users rules
     match /app_users/{username} {
       allow read, write: if true;

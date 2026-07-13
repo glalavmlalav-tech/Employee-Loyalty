@@ -237,3 +237,61 @@ export function formatDateToDDMMYYYY(dateStr: string | null | undefined): string
   return dateStr;
 }
 
+/**
+ * Checks if an employee was newly entered into the system (up to 10 days)
+ * based on EITHER the reference system date OR the actual real-world today's date.
+ */
+export function isNewEmployee(emp: Employee, referenceDateStr: string = "2026-05-25"): boolean {
+  try {
+    if (!emp.createdAt) return false;
+
+    // 1. Check relative to referenceDateStr
+    const checkWithRef = (targetDateStr: string) => {
+      const cleanStr = targetDateStr.includes("T") ? targetDateStr.split("T")[0] : targetDateStr;
+      const parts = cleanStr.split("-");
+      if (parts.length !== 3) return false;
+      const year = parseInt(parts[0]);
+      const month = parseInt(parts[1]) - 1;
+      const day = parseInt(parts[2]);
+      
+      const refParts = referenceDateStr.split("-");
+      if (refParts.length !== 3) return false;
+      const refYear = parseInt(refParts[0]);
+      const refMonth = parseInt(refParts[1]) - 1;
+      const refDay = parseInt(refParts[2]);
+      
+      const empDate = new Date(year, month, day);
+      const refDate = new Date(refYear, refMonth, refDay);
+      empDate.setHours(0, 0, 0, 0);
+      refDate.setHours(0, 0, 0, 0);
+      
+      const diffTime = refDate.getTime() - empDate.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= 10;
+    };
+
+    // 2. Check relative to actual real-world today
+    const checkWithRealToday = (targetDateStr: string) => {
+      const cleanStr = targetDateStr.includes("T") ? targetDateStr.split("T")[0] : targetDateStr;
+      const parts = cleanStr.split("-");
+      if (parts.length !== 3) return false;
+      const year = parseInt(parts[0]);
+      const month = parseInt(parts[1]) - 1;
+      const day = parseInt(parts[2]);
+      
+      const empDate = new Date(year, month, day);
+      const today = new Date();
+      empDate.setHours(0, 0, 0, 0);
+      today.setHours(0, 0, 0, 0);
+      
+      const diffTime = today.getTime() - empDate.getTime();
+      const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= 10;
+    };
+
+    return checkWithRef(emp.createdAt) || checkWithRealToday(emp.createdAt);
+  } catch (e) {
+    return false;
+  }
+}
+

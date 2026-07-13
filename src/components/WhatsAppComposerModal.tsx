@@ -19,6 +19,7 @@ interface WhatsAppComposerModalProps {
   employee: Employee;
   eventType: "birthday" | "marriage_anniversary" | "work_anniversary";
   language: "ku" | "en";
+  onLogSentMessage?: (message: string) => void;
 }
 
 const DEFAULT_TEMPLATES: WhatsAppTemplate[] = [
@@ -85,7 +86,8 @@ export default function WhatsAppComposerModal({
   onClose,
   employee,
   eventType,
-  language
+  language,
+  onLogSentMessage
 }: WhatsAppComposerModalProps) {
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
@@ -250,6 +252,7 @@ export default function WhatsAppComposerModal({
     }
 
     const waLink = `https://api.whatsapp.com/send?phone=${cleanedPhone}&text=${encodeURIComponent(messageText)}`;
+    onLogSentMessage?.(messageText);
     window.open(waLink, "_blank");
     onClose();
   };

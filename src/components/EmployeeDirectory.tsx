@@ -29,7 +29,7 @@ import {
   FileText
 } from "lucide-react";
 import { Employee, BusinessId, BUSINESSES, MaritalStatus, EmployeeStatus } from "../types";
-import { formatDateToDDMMYYYY } from "../utils";
+import { formatDateToDDMMYYYY, isNewEmployee } from "../utils";
 import ImageCropper from "./ImageCropper";
 import { compressImageBase64 } from "../utils/imageCompression";
 
@@ -170,6 +170,7 @@ interface EmployeeDirectoryProps {
   onDeleteEmployee: (id: string) => Promise<void>;
   language: "ku" | "en";
   userSession?: { username: string; role: "super_admin" | "admin" | "observer"; business: BusinessId | "all"; name: string } | null;
+  systemDate?: string;
 }
 
 export default function EmployeeDirectory({
@@ -178,7 +179,8 @@ export default function EmployeeDirectory({
   onUpdateEmployee,
   onDeleteEmployee,
   language,
-  userSession
+  userSession,
+  systemDate = "2026-05-25"
 }: EmployeeDirectoryProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const isSuperAdmin = userSession?.role === "super_admin";
@@ -1301,16 +1303,26 @@ export default function EmployeeDirectory({
               retired: "bg-slate-500/10 text-slate-700 border-slate-500/10"
             };
 
+            const isNew = isNewEmployee(emp, systemDate);
+
             return (
               <div 
                 key={emp.id}
-                className={`bg-white/45 backdrop-blur-md rounded-[32px] p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-md hover:scale-[1.01] hover:bg-white/70 border ${
+                className={`bg-white/45 backdrop-blur-md rounded-[32px] p-6 flex flex-col justify-between transition-all duration-300 hover:shadow-md hover:scale-[1.01] hover:bg-white/70 border relative ${
                   selectedEmpIds.includes(emp.id)
                     ? "border-amber-500 ring-2 ring-amber-500/10 shadow bg-white/70"
                     : "border-white/70"
                 }`}
                 id={`emp-card-${emp.id}`}
               >
+                {isNew && (
+                  <span className={`absolute -top-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-[0_4px_12px_rgba(16,185,129,0.3)] animate-pulse border border-emerald-400 select-none z-10 flex items-center gap-1 ${
+                    language === "ku" ? "left-6" : "right-6"
+                  }`}>
+                    <Sparkles className="w-3 h-3 text-amber-300" />
+                    {language === "ku" ? "نوێ" : "NEW"}
+                  </span>
+                )}
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-4">
                     <div className="flex items-center gap-3">

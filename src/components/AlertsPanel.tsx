@@ -15,7 +15,7 @@ import {
   HelpCircle,
   Download
 } from "lucide-react";
-import { AlertNotification, GiftLog, Employee, BusinessId, BUSINESSES } from "../types";
+import { AlertNotification, GiftLog, Employee, BusinessId, BUSINESSES, SentMessageLog } from "../types";
 import { formatDateToDDMMYYYY } from "../utils";
 
 const getWhatsAppLink = (phone: string, name: string, type: "birthday" | "marriage_anniversary" | "work_anniversary", language: "ku" | "en") => {
@@ -48,6 +48,7 @@ const getWhatsAppLink = (phone: string, name: string, type: "birthday" | "marria
 interface AlertsPanelProps {
   alerts: AlertNotification[];
   giftLogs: GiftLog[];
+  messageLogs?: SentMessageLog[];
   employees: Employee[];
   onUpdateGiftStatus: (giftId: string, status: GiftLog["status"]) => Promise<void>;
   onAddGiftIdea: (giftData: Omit<GiftLog, "id" | "updatedAt">) => Promise<void>;
@@ -60,6 +61,7 @@ interface AlertsPanelProps {
 export default function AlertsPanel({
   alerts,
   giftLogs,
+  messageLogs = [],
   employees,
   onUpdateGiftStatus,
   onAddGiftIdea,
@@ -72,6 +74,57 @@ export default function AlertsPanel({
   const [giftInput, setGiftInput] = useState<string>("");
   const [selectedAlertForGift, setSelectedAlertForGift] = useState<AlertNotification | null>(null);
   const [newGiftIdea, setNewGiftIdea] = useState<string>("");
+
+  const [messageSearch, setMessageSearch] = useState("");
+  const [messageOccasionFilter, setMessageOccasionFilter] = useState<string>("all");
+
+  const handleExportMessageLogsCSV = () => {
+    const headers = language === "ku"
+      ? ["ناوی کارمەند", "کۆمپانیا/بزنس", "جۆری بۆنە", "دەقی نامەی ناردراو", "ناردراوە لەلایەن", "کاتی ناردن"]
+      : ["Employee Name", "Business", "Occasion", "Sent Message Content", "Sent By", "Sent At"];
+
+    const filtered = messageLogs.filter((log) => {
+      const matchName = log.employeeName.toLowerCase().includes(messageSearch.toLowerCase());
+      const matchOccasion = messageOccasionFilter === "all" || log.occasionType === messageOccasionFilter;
+      return matchName && matchOccasion;
+    });
+
+    const rows = filtered.map((log) => {
+      const bizName = BUSINESSES[log.employeeBusiness]
+        ? (language === "ku" ? BUSINESSES[log.employeeBusiness].nameKu : BUSINESSES[log.employeeBusiness].nameEn)
+        : log.employeeBusiness;
+      const occasionText = log.occasionType === "birthday"
+        ? (language === "ku" ? "ڕۆژی لەدایکبوون" : "Birthday")
+        : log.occasionType === "marriage_anniversary"
+        ? (language === "ku" ? "ساڵیادی هاوسەرگیری" : "Wedding Anniversary")
+        : log.occasionType === "work_anniversary"
+        ? (language === "ku" ? "ساڵیادی دامەزراندن" : "Work Anniversary")
+        : (language === "ku" ? "گشتی" : "General");
+
+      return [
+        log.employeeName,
+        bizName,
+        occasionText,
+        log.message,
+        log.sentBy,
+        new Date(log.sentAt).toLocaleString(language === "ku" ? "ku-IQ" : "en-US")
+      ];
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) => row.map((val) => `"${String(val).replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Message_Logs_Report_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const handlePrint = () => {
     const isKu = language === "ku";
@@ -697,6 +750,211 @@ export default function AlertsPanel({
             </div>
           </div>
         )}
+      </div>
+
+      {/* 3. Sent Messages History Log (WhatsApp) */}
+      <div className="glass-panel rounded-[36px] p-6 md:p-8 shadow-sm relative overflow-hidden" id="sent_messages_tracker_section">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h3 className="text-xl font-display font-black text-slate-800 flex items-center gap-3">
+              <span className="p-2 bg-emerald-500/10 text-emerald-600 border border-emerald-500/10 rounded-2xl">
+                <BookmarkCheck className="w-5.5 h-4 text-emerald-600" />
+              </span>
+              {language === "ku" ? "تۆماری نامە ناردراوەکان (واتسئەپ)" : "Sent Messages Log (WhatsApp)"}
+            </h3>
+            <p className="text-slate-500 text-xs md:text-sm mt-1.5 font-sans">
+              {language === "ku" 
+                ? "مێژووی نامە پیرۆزباییە ناردراوەکان بۆ کارمەندان لە ڕێگەی واتسئەپەوە" 
+                : "Review history of congratulatory messages successfully sent to your staff."}
+            </p>
+          </div>
+          {messageLogs.length > 0 && (
+            <button
+              onClick={handleExportMessageLogsCSV}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md hover:scale-102 transition duration-200 cursor-pointer self-start sm:self-auto font-sans"
+              title={language === "ku" ? "داونلۆدکردنی ڕاپۆرتی نامەکان بە فایلی ئێکسڵ" : "Download message logs report as CSV Excel Sheet"}
+            >
+              <Download className="w-4 h-4" />
+              {language === "ku" ? "داونلۆدی کۆی نامەکان" : "Export Message Log"}
+            </button>
+          )}
+        </div>
+
+        {/* Filters and search box */}
+        {messageLogs.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-5 p-4 bg-white/30 backdrop-blur-sm rounded-2xl border border-white/60">
+            {/* Search Input */}
+            <div className="relative">
+              <span className="absolute inset-y-0 right-3 flex items-center pl-3 pointer-events-none">
+                <Search className="h-4 w-4 text-slate-400" />
+              </span>
+              <input
+                type="text"
+                placeholder={language === "ku" ? "گەڕان بەپێی ناوی کارمەند..." : "Search by employee name..."}
+                value={messageSearch}
+                onChange={(e) => setMessageSearch(e.target.value)}
+                className="w-full text-xs p-2.5 pr-9 bg-white/70 border border-slate-200/60 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans shadow-2xs"
+              />
+            </div>
+            {/* Occasion Filter */}
+            <div>
+              <select
+                value={messageOccasionFilter}
+                onChange={(e) => setMessageOccasionFilter(e.target.value)}
+                className="w-full text-xs p-2.5 bg-white/70 border border-slate-200/60 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans shadow-2xs cursor-pointer"
+              >
+                <option value="all">{language === "ku" ? "گشت بۆنەکان" : "All Occasions"}</option>
+                <option value="birthday">{language === "ku" ? "ڕۆژی لەدایکبوون 🎂" : "Birthday 🎂"}</option>
+                <option value="marriage_anniversary">{language === "ku" ? "ساڵیادی هاوسەرگیری 💍" : "Wedding Anniversary 💍"}</option>
+                <option value="work_anniversary">{language === "ku" ? "ساڵیادی دامەزراندن 🏆" : "Work Anniversary 🏆"}</option>
+                <option value="general">{language === "ku" ? "گشتی ✨" : "General ✨"}</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {(() => {
+          const filteredLogs = messageLogs.filter((log) => {
+            const matchName = log.employeeName.toLowerCase().includes(messageSearch.toLowerCase());
+            const matchOccasion = messageOccasionFilter === "all" || log.occasionType === messageOccasionFilter;
+            return matchName && matchOccasion;
+          });
+
+          if (messageLogs.length === 0) {
+            return (
+              <div className="text-center py-12 text-slate-400 bg-white/30 backdrop-blur-sm rounded-[24px] border border-dashed border-slate-200">
+                <BookmarkCheck className="w-10 h-10 mx-auto text-slate-300 mb-2 animate-pulse-slow" />
+                <p className="text-xs">{language === "ku" ? "هیچ مێژووی نامەیەکی ناردراو لە ئێستادا نییە." : "No message logs recorded yet. Send a WhatsApp message from the alerts above!"}</p>
+              </div>
+            );
+          }
+
+          if (filteredLogs.length === 0) {
+            return (
+              <div className="text-center py-10 text-slate-400 bg-white/30 backdrop-blur-sm rounded-[24px] border border-dashed border-slate-200">
+                <p className="text-xs">{language === "ku" ? "هیچ نامەیەک نەدۆزرایەوە بۆ گەڕانەکەت." : "No matching message logs found for your query."}</p>
+              </div>
+            );
+          }
+
+          return (
+            <div className="space-y-4">
+              {/* Desktop Table View */}
+              <div className="hidden lg:block overflow-x-auto rounded-2xl border border-white/60 bg-white/30 backdrop-blur-sm">
+                <table className="w-full text-sm text-left border-collapse" id="message_logs_table">
+                  <thead>
+                    <tr className="border-b border-white/60 text-slate-500 uppercase text-[10px] tracking-wider bg-white/40">
+                      <th className="py-3.5 px-4 text-right font-extrabold">{language === "ku" ? "کارمەند" : "Employee"}</th>
+                      <th className="py-3.5 px-4 text-right font-extrabold">{language === "ku" ? "بزنس / کۆمپانیا" : "Business"}</th>
+                      <th className="py-3.5 px-4 text-right font-extrabold">{language === "ku" ? "جۆری بۆنە" : "Occasion"}</th>
+                      <th className="py-3.5 px-4 text-right font-extrabold">{language === "ku" ? "دەقی نامە ناردراوەکە" : "Sent Message"}</th>
+                      <th className="py-3.5 px-4 text-center font-extrabold">{language === "ku" ? "ناردراوە لەلایەن" : "Sent By"}</th>
+                      <th className="py-3.5 px-4 text-center font-extrabold">{language === "ku" ? "کاتی ناردن" : "Sent At"}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredLogs.map((log) => {
+                      return (
+                        <tr key={log.id} className="border-b border-white/20 hover:bg-white/40 transition">
+                          <td className="py-4 px-4 font-extrabold text-slate-800 text-right">
+                            {log.employeeName}
+                          </td>
+                          <td className="py-4 px-4 text-right text-slate-600 text-xs font-sans font-bold">
+                            {getBusinessLabel(log.employeeBusiness)}
+                          </td>
+                          <td className="py-4 px-4 text-right text-xs">
+                            <span className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold ${
+                              log.occasionType === "birthday" 
+                                ? "bg-amber-500/10 border-amber-500/10 text-amber-700" 
+                                : log.occasionType === "marriage_anniversary"
+                                ? "bg-purple-500/10 border-purple-500/10 text-purple-700"
+                                : log.occasionType === "work_anniversary"
+                                ? "bg-teal-500/10 border-teal-500/10 text-teal-700"
+                                : "bg-slate-500/10 border-slate-500/10 text-slate-700"
+                            }`}>
+                              {log.occasionType === "birthday" 
+                                ? t.birthday 
+                                : log.occasionType === "marriage_anniversary"
+                                ? t.anniversary 
+                                : log.occasionType === "work_anniversary"
+                                ? t.workAnniversary
+                                : "گشتی / General"}
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 text-right max-w-sm text-xs text-slate-700 font-sans break-words whitespace-pre-line leading-relaxed font-medium">
+                            {log.message}
+                          </td>
+                          <td className="py-4 px-4 text-center text-xs font-bold text-slate-600">
+                            👤 {log.sentBy}
+                          </td>
+                          <td className="py-4 px-4 text-center text-[11px] text-slate-500 font-mono">
+                            {new Date(log.sentAt).toLocaleString(language === "ku" ? "ku-IQ" : "en-US")}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Stack View */}
+              <div className="lg:hidden space-y-4">
+                {filteredLogs.map((log) => {
+                  return (
+                    <div 
+                      key={log.id} 
+                      className="bg-white/45 backdrop-blur-md rounded-2xl border border-white/70 p-5 flex flex-col gap-4 shadow-sm text-right"
+                      dir={language === "ku" ? "rtl" : "ltr"}
+                    >
+                      <div className="flex items-start justify-between gap-2 border-b border-slate-200/50 pb-3">
+                        <div>
+                          <h4 className="font-extrabold text-slate-800 text-sm">{log.employeeName}</h4>
+                          <span className="text-[10px] text-slate-500 font-bold block mt-0.5">
+                            {getBusinessLabel(log.employeeBusiness)}
+                          </span>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-lg border text-[10px] font-bold ${
+                          log.occasionType === "birthday" 
+                            ? "bg-amber-500/10 border-amber-500/10 text-amber-700" 
+                            : log.occasionType === "marriage_anniversary"
+                            ? "bg-purple-500/10 border-purple-500/10 text-purple-700"
+                            : log.occasionType === "work_anniversary"
+                            ? "bg-teal-500/10 border-teal-500/10 text-teal-700"
+                            : "bg-slate-500/10 border-slate-500/10 text-slate-700"
+                        }`}>
+                          {log.occasionType === "birthday" 
+                            ? t.birthday 
+                            : log.occasionType === "marriage_anniversary"
+                            ? t.anniversary 
+                            : log.occasionType === "work_anniversary"
+                            ? t.workAnniversary
+                            : "گشتی / General"}
+                        </span>
+                      </div>
+
+                      <div className="space-y-2 text-xs text-slate-700">
+                        <div className="flex justify-between items-center text-[11px] border-b border-slate-100 pb-1.5">
+                          <span className="text-slate-450">{language === "ku" ? "ناردراوە لەلایەن:" : "Sent By:"}</span>
+                          <span className="font-bold text-slate-600">👤 {log.sentBy}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-[11px] border-b border-slate-100 pb-1.5">
+                          <span className="text-slate-450">{language === "ku" ? "کاتی ناردن:" : "Sent At:"}</span>
+                          <span className="font-mono text-slate-500">{new Date(log.sentAt).toLocaleString(language === "ku" ? "ku-IQ" : "en-US")}</span>
+                        </div>
+                        <div className="flex flex-col gap-1 mt-2">
+                          <span className="text-slate-450 text-right">{language === "ku" ? "دەقی نامەی ناردراو:" : "Sent Message:"}</span>
+                          <p className="bg-white/60 p-3 rounded-xl border border-white/80 text-slate-800 font-medium leading-relaxed font-sans text-right whitespace-pre-line">
+                            {log.message}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
     </div>

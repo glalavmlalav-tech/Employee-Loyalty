@@ -108,6 +108,7 @@ export interface Employee {
   iqamaUrl?: string; // وێنەی ئیقامە بۆ بیانیەکان
   notes?: string; // تێبینیەکان
   createdBy?: string; // Username of creator
+  createdAt?: string; // ISO string when the profile was added
   reportText?: string; // Detail about incorrect info reported by admin
   reportStatus?: "pending" | "resolved"; // Status of the report
   reportUser?: string; // Who sent the report
@@ -179,3 +180,15 @@ export interface WhatsAppTemplate {
   type: "birthday" | "marriage_anniversary" | "work_anniversary" | "general";
   isDefault?: boolean;
 }
+
+export interface SentMessageLog {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeeBusiness: BusinessId;
+  occasionType: "birthday" | "marriage_anniversary" | "work_anniversary" | "general";
+  message: string;
+  sentAt: string; // ISO String
+  sentBy: string; // Username of sender
+}
+

@@ -47,13 +47,30 @@
         "id": { "type": "string" },
         "employeeId": { "type": "string" },
         "employeeName": { "type": "string" },
-        "occasionType": { "type": "string", "enum": ["birthday", "marriage_anniversary"] },
+        "employeeBusiness": { "type": "string" },
+        "occasionType": { "type": "string", "enum": ["birthday", "marriage_anniversary", "work_anniversary"] },
         "occasionDate": { "type": "string" },
         "giftIdea": { "type": "string" },
         "status": { "type": "string", "enum": ["pending", "prepared", "delivered", "cancelled"] },
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "employeeId", "employeeName", "occasionType", "occasionDate", "status", "updatedAt"]
+    },
+    "SentMessageLog": {
+      "title": "SentMessageLog",
+      "description": "Log of messages sent via WhatsApp to employees for their occasions.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "employeeBusiness": { "type": "string" },
+        "occasionType": { "type": "string", "enum": ["birthday", "marriage_anniversary", "work_anniversary", "general"] },
+        "message": { "type": "string" },
+        "sentAt": { "type": "string" },
+        "sentBy": { "type": "string" }
+      },
+      "required": ["id", "employeeId", "employeeName", "occasionType", "message", "sentAt", "sentBy"]
     },
     "AppUser": {
       "title": "AppUser",
@@ -83,6 +100,10 @@
     "gifts/{giftId}": {
       "schema": "GiftLog",
       "description": "Gifts log tracker"
+    },
+    "messages/{messageId}": {
+      "schema": "SentMessageLog",
+      "description": "Sent messages log tracker"
     },
     "app_users/{username}": {
       "schema": "AppUser",

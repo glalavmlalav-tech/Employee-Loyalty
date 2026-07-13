@@ -41,7 +41,7 @@ import {
   Upload
 } from "lucide-react";
 import { db, auth, handleFirestoreError, OperationType } from "./firebase";
-import { Employee, LoyaltyActivity, GiftLog, AlertNotification, BusinessId, BUSINESSES, AppUser } from "./types";
+import { Employee, LoyaltyActivity, GiftLog, AlertNotification, BusinessId, BUSINESSES, AppUser, SentMessageLog } from "./types";
 import { getActiveAlerts } from "./utils";
 
 // Sub-components
@@ -65,7 +65,8 @@ const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
     maritalStatus: "married" as const,
     marriageAnniversary: "2012-04-10",
     hireDate: "2018-03-01",
-    status: "active" as const
+    status: "active" as const,
+    createdAt: "2026-05-20"
   },
   {
     id: "emp-lane",
@@ -185,6 +186,17 @@ export default function App() {
   });
   const [giftLogs, setGiftLogs] = useState<GiftLog[]>(() => {
     const cached = localStorage.getItem("cache_gifts");
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [messageLogs, setMessageLogs] = useState<SentMessageLog[]>(() => {
+    const cached = localStorage.getItem("cache_messages");
     if (cached) {
       try {
         return JSON.parse(cached);
@@ -410,10 +422,36 @@ export default function App() {
       }
     );
 
+    // 4. Snapshot for Sent messages logs
+    const unsubscribeMessages = onSnapshot(
+      collection(db, "messages"),
+      (snapshot) => {
+        const msgList: SentMessageLog[] = [];
+        snapshot.forEach((docSnap) => {
+          msgList.push({ id: docSnap.id, ...docSnap.data() } as SentMessageLog);
+        });
+        const sorted = msgList.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+        setMessageLogs(sorted);
+        safeLocalStorageSetItem("cache_messages", JSON.stringify(sorted));
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, "messages");
+        // Fallback to local cache so user doesn't see a blank screen
+        const cached = localStorage.getItem("cache_messages");
+        if (cached) {
+          try {
+            setMessageLogs(JSON.parse(cached));
+          } catch (e) {}
+        }
+        setDbLoading(false);
+      }
+    );
+
     return () => {
       unsubscribeEmployees();
       unsubscribeActivities();
       unsubscribeGifts();
+      unsubscribeMessages();
     };
   }, [currentUser, sandboxGuest, userSession]);
 
@@ -481,6 +519,7 @@ export default function App() {
       newEmp = {
         ...empData,
         createdBy: userSession?.username || "admin",
+        createdAt: new Date().toISOString(),
         id: docRef.id
       };
       // Optimistic update
@@ -596,6 +635,26 @@ export default function App() {
     }
   };
 
+  const addMessageLog = async (msgData: Omit<SentMessageLog, "id" | "sentAt">) => {
+    const tempId = `msg-${Date.now()}`;
+    const newMsg: SentMessageLog = {
+      ...msgData,
+      id: tempId,
+      sentAt: new Date().toISOString()
+    };
+    try {
+      // Optimistic update
+      setMessageLogs((prev) => {
+        const updated = [newMsg, ...prev].sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+        safeLocalStorageSetItem("cache_messages", JSON.stringify(updated));
+        return updated;
+      });
+      await setDoc(doc(db, "messages", tempId), newMsg);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.CREATE, "messages");
+    }
+  };
+
   const updateGiftStatus = async (giftId: string, status: GiftLog["status"]) => {
     const docRef = doc(db, "gifts", giftId);
     const updatedTime = new Date().toISOString();
@@ -607,8 +666,8 @@ export default function App() {
         return updated;
       });
       await updateDoc(docRef, { 
-        status,
-        updatedAt: updatedTime
+         status,
+         updatedAt: updatedTime
       });
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `gifts/${giftId}`);
@@ -622,6 +681,7 @@ export default function App() {
         employees,
         activities,
         gifts: giftLogs,
+        messages: messageLogs,
         appUsers,
         exportDate: new Date().toISOString(),
         version: "1.0"
@@ -663,6 +723,10 @@ export default function App() {
           if (Array.isArray(json.gifts)) {
             setGiftLogs(json.gifts);
             safeLocalStorageSetItem("cache_gifts", JSON.stringify(json.gifts));
+          }
+          if (Array.isArray(json.messages)) {
+            setMessageLogs(json.messages);
+            safeLocalStorageSetItem("cache_messages", JSON.stringify(json.messages));
           }
           if (Array.isArray(json.appUsers)) {
             setAppUsers(json.appUsers);
@@ -871,6 +935,10 @@ export default function App() {
 
   const displayGiftLogs = giftLogs.filter((g) => 
     displayEmployees.some((emp) => emp.id === g.employeeId)
+  );
+
+  const displayMessageLogs = messageLogs.filter((m) => 
+    displayEmployees.some((emp) => emp.id === m.employeeId)
   );
 
   const displayActivities = isRestrictedBusiness
@@ -1566,6 +1634,7 @@ export default function App() {
                   <AlertsPanel
                     alerts={displayAlerts}
                     giftLogs={displayGiftLogs}
+                    messageLogs={displayMessageLogs}
                     employees={displayEmployees}
                     onUpdateGiftStatus={updateGiftStatus}
                     onAddGiftIdea={addGiftLog}
@@ -1584,6 +1653,7 @@ export default function App() {
                     onUpdateEmployee={updateEmployeeInFirestore}
                     onDeleteEmployee={deleteEmployeeFromFirestore}
                     language={language}
+                    systemDate={systemDate}
                   />
                 )}
 
@@ -1631,6 +1701,17 @@ export default function App() {
           employee={whatsappComposer.employee}
           eventType={whatsappComposer.eventType}
           language={language}
+          onLogSentMessage={(msgText) => {
+            const senderName = userSession?.name || sandboxGuest || "Admin";
+            addMessageLog({
+              employeeId: whatsappComposer.employee.id,
+              employeeName: whatsappComposer.employee.name,
+              employeeBusiness: whatsappComposer.employee.business,
+              occasionType: whatsappComposer.eventType,
+              message: msgText,
+              sentBy: senderName
+            });
+          }}
         />
       )}
 
