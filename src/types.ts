@@ -109,6 +109,9 @@ export interface Employee {
   notes?: string; // تێبینیەکان
   createdBy?: string; // Username of creator
   createdAt?: string; // ISO string when the profile was added
+  isDeleted?: boolean; // True if the employee is soft deleted (in trash)
+  deletedAt?: string; // Timestamp of soft deletion
+  deletedBy?: string; // Who soft deleted the employee
   reportText?: string; // Detail about incorrect info reported by admin
   reportStatus?: "pending" | "resolved"; // Status of the report
   reportUser?: string; // Who sent the report

@@ -18,7 +18,10 @@
         "maritalStatus": { "type": "string", "enum": ["single", "married"] },
         "marriageAnniversary": { "type": "string", "format": "date", "description": "YYYY-MM-DD, optional if single" },
         "hireDate": { "type": "string", "format": "date", "description": "YYYY-MM-DD" },
-        "status": { "type": "string", "enum": ["active", "suspended", "retired"] }
+        "status": { "type": "string", "enum": ["active", "suspended", "retired"] },
+        "isDeleted": { "type": "boolean", "description": "Whether the employee is soft deleted" },
+        "deletedAt": { "type": "string", "description": "ISO timestamp of deletion" },
+        "deletedBy": { "type": "string", "description": "Username of the administrator who deleted the employee" }
       },
       "required": ["id", "name", "business", "role", "birthDate", "maritalStatus", "hireDate", "status"]
     },

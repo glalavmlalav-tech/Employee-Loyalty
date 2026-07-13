@@ -269,7 +269,7 @@ export default function EmployeeDirectory({
     retired: language === "ku" ? "خانەنشینکراو" : "Retired",
     save: language === "ku" ? "پاشەکەوتکردن" : "Save Profile",
     cancel: language === "ku" ? "پاشگەزبوونەوە" : "Cancel",
-    confirmDelete: language === "ku" ? "ئایا دڵنیای لە سڕینەوەی ئەم کارمەندە؟ زانیاریەکان لە فایەربەیس دەسڕێنەوە." : "Are you sure you want to delete this employee? This will sync immediately to other devices.",
+    confirmDelete: language === "ku" ? "ئایا دڵنیای لە ناردنی ئەم کارمەندە بۆ سەبەتەی خۆڵ؟ بەڕێوەبەری سەرەکی دەتوانێت لە بەشی ترەش بیگەڕێنێتەوە." : "Are you sure you want to move this employee to the Trash? They can be restored later by a Super Admin.",
     noEmployees: language === "ku" ? "هیچ کارمەندێک نەدۆزرایەوە بەم ناو نیشانانە." : "No employees match your search or filter requirements.",
     mandatoryFields: language === "ku" ? "* تکایە تەواوی کێڵگە ناچارییەکان پڕبکەرەوە." : "* Please fill in all required employee fields.",
   };

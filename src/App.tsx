@@ -8,7 +8,8 @@ import {
   doc, 
   setDoc,
   getDocs,
-  getDoc
+  getDoc,
+  deleteField
 } from "firebase/firestore";
 import { 
   signInWithPopup, 
@@ -38,7 +39,8 @@ import {
   Lock,
   UserCheck,
   Download,
-  Upload
+  Upload,
+  Trash2
 } from "lucide-react";
 import { db, auth, handleFirestoreError, OperationType } from "./firebase";
 import { Employee, LoyaltyActivity, GiftLog, AlertNotification, BusinessId, BUSINESSES, AppUser, SentMessageLog } from "./types";
@@ -53,6 +55,7 @@ import StaffLoginForm from "./components/StaffLoginForm";
 import MonthlyPlanner from "./components/MonthlyPlanner";
 import MonthlyCelebrations from "./components/MonthlyCelebrations";
 import WhatsAppComposerModal from "./components/WhatsAppComposerModal";
+import TrashPanel from "./components/TrashPanel";
 
 const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
   {
@@ -157,7 +160,7 @@ const getTodayDateString = (): string => {
 
 export default function App() {
   const [language, setLanguage] = useState<"ku" | "en">("ku");
-  const [activeTab, setActiveTab] = useState<"alerts" | "employees" | "planner" | "months" | "settings">("alerts");
+  const [activeTab, setActiveTab] = useState<"alerts" | "employees" | "planner" | "months" | "settings" | "trash">("alerts");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [systemDate, setSystemDate] = useState<string>(getTodayDateString);
   
@@ -552,6 +555,64 @@ export default function App() {
 
   const deleteEmployeeFromFirestore = async (id: string) => {
     const docRef = doc(db, "employees", id);
+    const senderName = userSession?.name || sandboxGuest || "Admin";
+    try {
+      // Optimistic update
+      setEmployees((prev) => {
+        const updated = prev.map((e) => {
+          if (e.id === id) {
+            return {
+              ...e,
+              isDeleted: true,
+              deletedAt: new Date().toISOString(),
+              deletedBy: senderName
+            };
+          }
+          return e;
+        });
+        safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+        return updated;
+      });
+      await updateDoc(docRef, {
+        isDeleted: true,
+        deletedAt: new Date().toISOString(),
+        deletedBy: senderName
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `employees/${id}`);
+    }
+  };
+
+  const restoreEmployeeFromTrash = async (id: string) => {
+    const docRef = doc(db, "employees", id);
+    try {
+      // Optimistic update
+      setEmployees((prev) => {
+        const updated = prev.map((e) => {
+          if (e.id === id) {
+            const copy = { ...e };
+            delete copy.isDeleted;
+            delete copy.deletedAt;
+            delete copy.deletedBy;
+            return copy;
+          }
+          return e;
+        });
+        safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+        return updated;
+      });
+      await updateDoc(docRef, {
+        isDeleted: deleteField(),
+        deletedAt: deleteField(),
+        deletedBy: deleteField()
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `employees/${id}`);
+    }
+  };
+
+  const permanentlyDeleteEmployeeFromFirestore = async (id: string) => {
+    const docRef = doc(db, "employees", id);
     try {
       // Optimistic update
       setEmployees((prev) => {
@@ -917,6 +978,10 @@ export default function App() {
   const isSuperAdmin = userSession?.role === "super_admin";
 
   const displayEmployees = employees.filter((e) => {
+    // Exclude soft deleted / trash employees from active views
+    if (e.isDeleted) {
+      return false;
+    }
     // 1. Business boundary alignment
     if (isRestrictedBusiness) {
       const userBiz = restrictedBusinessId === "linia" ? "linia_karge" : restrictedBusinessId;
@@ -926,6 +991,22 @@ export default function App() {
       }
     }
     // No Creator restriction: Any admin sees all employees in their business
+    return true;
+  });
+
+  const trashEmployees = employees.filter((e) => {
+    // Only soft deleted / trash employees
+    if (!e.isDeleted) {
+      return false;
+    }
+    // Business boundary alignment
+    if (isRestrictedBusiness) {
+      const userBiz = restrictedBusinessId === "linia" ? "linia_karge" : restrictedBusinessId;
+      const empBiz = e.business === "linia" ? "linia_karge" : e.business;
+      if (empBiz !== userBiz) {
+        return false;
+      }
+    }
     return true;
   });
 
@@ -1203,6 +1284,24 @@ export default function App() {
             </button>
           )}
 
+          {/* TAB: Trash🗑️ (Only for super admins) */}
+          {userSession?.role === "super_admin" && (
+            <button
+              onClick={() => {
+                setActiveTab("trash");
+                setIsMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all duration-300 text-start group ${
+                activeTab === "trash"
+                  ? "bg-gradient-to-r from-rose-500/20 to-amber-500/10 text-rose-300 border border-rose-500/30 shadow-[0_8px_20px_rgba(244,63,94,0.15)] font-bold"
+                  : "text-slate-400 hover:bg-white/5 hover:text-white border border-transparent"
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 transition-all ${activeTab === "trash" ? "bg-rose-400 scale-110" : "bg-transparent group-hover:bg-slate-600"}`} />
+              <span className="flex-1 text-xs md:text-sm">{language === "ku" ? "سەبەتەی خۆڵ 🗑️" : "Trash Bin 🗑️"}</span>
+            </button>
+          )}
+
           {/* TAB 5: Settings⚙️ (Only for super admins) */}
           {userSession?.role === "super_admin" && (
             <button
@@ -1300,6 +1399,7 @@ export default function App() {
                 {activeTab === "employees" && t.employeesTab.split(" ")[0]}
                 {activeTab === "planner" && t.plannerTab.split(" ")[0]}
                 {activeTab === "months" && t.monthsTab.split(" ")[0]}
+                {activeTab === "trash" && (language === "ku" ? "سەبەتەی خۆڵ 🗑️" : "Trash Bin 🗑️")}
               </h2>
               <p className="text-[11px] lg:text-xs text-slate-500 font-bold select-none">
                 {language === "ku" 
@@ -1685,6 +1785,15 @@ export default function App() {
                     currentUserEmail={userSession?.email || userSession?.username}
                     employees={employees}
                     onUpdateEmployee={updateEmployeeInFirestore}
+                  />
+                )}
+
+                {activeTab === "trash" && userSession?.role === "super_admin" && (
+                  <TrashPanel
+                    trashEmployees={trashEmployees}
+                    language={language}
+                    onRestoreEmployee={restoreEmployeeFromTrash}
+                    onPermanentDeleteEmployee={permanentlyDeleteEmployeeFromFirestore}
                   />
                 )}
               </div>
