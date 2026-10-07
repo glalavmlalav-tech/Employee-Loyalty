@@ -1648,10 +1648,11 @@ export default function EmployeeDirectory({
                         {language === "ku" ? "ڕاپۆرتکردن" : "Report"}
                       </button>
                     )}
-                    {userSession?.role !== "admin" && userSession?.role !== "observer" && (
+                    {userSession?.role !== "observer" && (
                       <button
                         onClick={() => handleDelete(emp.id)}
-                        className="px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-slate-200 hover:border-rose-100 rounded-xl font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm"
+                        className="px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-slate-200 hover:border-rose-100 rounded-xl font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm cursor-pointer"
+                        title={language === "ku" ? "سڕینەوە و ناردن بۆ سەبەتەی خۆڵ" : "Delete & Send to Trash"}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         {language === "ku" ? "سڕینەوە" : "Delete"}
