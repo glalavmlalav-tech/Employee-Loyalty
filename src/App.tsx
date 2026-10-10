@@ -40,9 +40,11 @@ import {
   UserCheck,
   Download,
   Upload,
-  Trash2
+  Trash2,
+  Clock,
+  ShieldCheck
 } from "lucide-react";
-import { db, auth, handleFirestoreError, OperationType } from "./firebase";
+import { db, auth, handleFirestoreError, OperationType, reconnectFirestoreNetwork } from "./firebase";
 import { Employee, LoyaltyActivity, GiftLog, AlertNotification, BusinessId, BUSINESSES, AppUser, SentMessageLog } from "./types";
 import { getActiveAlerts } from "./utils";
 
@@ -340,17 +342,113 @@ export default function App() {
     }
   }, [currentUser, appUsers, appUsersLoaded]);
 
-  // Monitor real-time Firestore database synchronization (Multi-device synced!)
-  useEffect(() => {
-    const isUserAllowed = currentUser || sandboxGuest || userSession;
-    if (!isUserAllowed) {
-      setDbLoading(false);
-      return;
+  const [isSyncing, setIsSyncing] = useState(false);
+  const hasSubscribedEmployeesRef = React.useRef(false);
+  const hasFetchedSecondaryRef = React.useRef(false);
+
+  // 1. Fetch app users on-demand (avoids permanent 24/7 read loops)
+  const fetchAppUsers = useCallback(async () => {
+    try {
+      const snap = await getDocs(collection(db, "app_users"));
+      const userList: AppUser[] = [];
+      snap.forEach((docSnap) => {
+        userList.push({ id: docSnap.id, ...docSnap.data() } as AppUser);
+      });
+      if (userList.length > 0) {
+        setAppUsers(userList);
+        safeLocalStorageSetItem("cache_app_users", JSON.stringify(userList));
+      }
+      setAppUsersLoaded(true);
+
+      const hasOwner = userList.some((u) => u.username === "glalavmlalav");
+      if (!hasOwner) {
+        setDoc(doc(db, "app_users", "glalavmlalav"), {
+          id: "glalavmlalav",
+          username: "glalavmlalav",
+          password: "admin",
+          email: "glalavmlalav@gmail.com",
+          name: "Super Admin (glalavmlalav)",
+          role: "super_admin",
+          business: "all",
+          createdAt: new Date().toISOString()
+        }).catch((err) => console.log("Owner seeding backup failed:", err));
+      }
+    } catch (error) {
+      console.warn("Error fetching app users from Firestore:", error);
+      handleFirestoreError(error, OperationType.LIST, "app_users");
+      const cached = localStorage.getItem("cache_app_users");
+      if (cached) {
+        try { setAppUsers(JSON.parse(cached)); } catch (e) {}
+      }
+      setAppUsersLoaded(true);
+    }
+  }, []);
+
+  // 2. Fetch Secondary Collections (Activities, Gifts, Messages) on demand or startup
+  const fetchSecondaryCollections = useCallback(async () => {
+    try {
+      const actSnap = await getDocs(collection(db, "activities"));
+      const actList: LoyaltyActivity[] = [];
+      actSnap.forEach((docSnap) => {
+        actList.push({ id: docSnap.id, ...docSnap.data() } as LoyaltyActivity);
+      });
+      if (actList.length > 0) {
+        const sorted = actList.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        setActivities(sorted);
+        safeLocalStorageSetItem("cache_activities", JSON.stringify(sorted));
+      }
+    } catch (e) {
+      console.warn("Could not fetch activities from Firestore:", e);
     }
 
+    try {
+      const giftSnap = await getDocs(collection(db, "gifts"));
+      const giftList: GiftLog[] = [];
+      giftSnap.forEach((docSnap) => {
+        giftList.push({ id: docSnap.id, ...docSnap.data() } as GiftLog);
+      });
+      if (giftList.length > 0) {
+        const sorted = giftList.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        setGiftLogs(sorted);
+        safeLocalStorageSetItem("cache_gifts", JSON.stringify(sorted));
+      }
+    } catch (e) {
+      console.warn("Could not fetch gifts from Firestore:", e);
+    }
+
+    try {
+      const msgSnap = await getDocs(collection(db, "messages"));
+      const msgList: SentMessageLog[] = [];
+      msgSnap.forEach((docSnap) => {
+        msgList.push({ id: docSnap.id, ...docSnap.data() } as SentMessageLog);
+      });
+      if (msgList.length > 0) {
+        const sorted = msgList.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+        setMessageLogs(sorted);
+        safeLocalStorageSetItem("cache_messages", JSON.stringify(sorted));
+      }
+    } catch (e) {
+      console.warn("Could not fetch messages from Firestore:", e);
+    }
+  }, []);
+
+  // Initial load of app_users and secondary collections (runs once per session)
+  useEffect(() => {
+    fetchAppUsers();
+    if (!hasFetchedSecondaryRef.current) {
+      hasFetchedSecondaryRef.current = true;
+      fetchSecondaryCollections();
+    }
+  }, [fetchAppUsers, fetchSecondaryCollections]);
+
+  // 3. Stable, Singleton Real-time listener for Employees
+  // Stays active permanently without re-subscribing in loops on session changes!
+  useEffect(() => {
+    if (hasSubscribedEmployeesRef.current) return;
+    hasSubscribedEmployeesRef.current = true;
+
     setDbLoading(true);
-    
-    // 1. Snapshot for Employees
+
     const unsubscribeEmployees = onSnapshot(
       collection(db, "employees"),
       (snapshot) => {
@@ -364,7 +462,6 @@ export default function App() {
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, "employees");
-        // Fallback to local cache so user doesn't see a blank screen
         const cached = localStorage.getItem("cache_employees");
         if (cached) {
           try {
@@ -375,137 +472,25 @@ export default function App() {
       }
     );
 
-    // 2. Snapshot for Loyalty Activities
-    const unsubscribeActivities = onSnapshot(
-      collection(db, "activities"),
-      (snapshot) => {
-        const actList: LoyaltyActivity[] = [];
-        snapshot.forEach((docSnap) => {
-          actList.push({ id: docSnap.id, ...docSnap.data() } as LoyaltyActivity);
-        });
-        const sorted = actList.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-        setActivities(sorted);
-        safeLocalStorageSetItem("cache_activities", JSON.stringify(sorted));
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, "activities");
-        // Fallback to local cache so user doesn't see a blank screen
-        const cached = localStorage.getItem("cache_activities");
-        if (cached) {
-          try {
-            setActivities(JSON.parse(cached));
-          } catch (e) {}
-        }
-        setDbLoading(false);
-      }
-    );
-
-    // 3. Snapshot for Gift preparation logs
-    const unsubscribeGifts = onSnapshot(
-      collection(db, "gifts"),
-      (snapshot) => {
-        const giftList: GiftLog[] = [];
-        snapshot.forEach((docSnap) => {
-          giftList.push({ id: docSnap.id, ...docSnap.data() } as GiftLog);
-        });
-        const sorted = giftList.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-        setGiftLogs(sorted);
-        safeLocalStorageSetItem("cache_gifts", JSON.stringify(sorted));
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, "gifts");
-        // Fallback to local cache so user doesn't see a blank screen
-        const cached = localStorage.getItem("cache_gifts");
-        if (cached) {
-          try {
-            setGiftLogs(JSON.parse(cached));
-          } catch (e) {}
-        }
-        setDbLoading(false);
-      }
-    );
-
-    // 4. Snapshot for Sent messages logs
-    const unsubscribeMessages = onSnapshot(
-      collection(db, "messages"),
-      (snapshot) => {
-        const msgList: SentMessageLog[] = [];
-        snapshot.forEach((docSnap) => {
-          msgList.push({ id: docSnap.id, ...docSnap.data() } as SentMessageLog);
-        });
-        const sorted = msgList.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
-        setMessageLogs(sorted);
-        safeLocalStorageSetItem("cache_messages", JSON.stringify(sorted));
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, "messages");
-        // Fallback to local cache so user doesn't see a blank screen
-        const cached = localStorage.getItem("cache_messages");
-        if (cached) {
-          try {
-            setMessageLogs(JSON.parse(cached));
-          } catch (e) {}
-        }
-        setDbLoading(false);
-      }
-    );
-
     return () => {
       unsubscribeEmployees();
-      unsubscribeActivities();
-      unsubscribeGifts();
-      unsubscribeMessages();
-    };
-  }, [currentUser, sandboxGuest, userSession]);
-
-  // Distinct unconditional hook to fetch System Admin Credentials (available on splash login screen)
-  useEffect(() => {
-    const unsubscribeAppUsers = onSnapshot(
-      collection(db, "app_users"),
-      (snapshot) => {
-        const userList: AppUser[] = [];
-        snapshot.forEach((docSnap) => {
-          userList.push({ id: docSnap.id, ...docSnap.data() } as AppUser);
-        });
-        setAppUsers(userList);
-        safeLocalStorageSetItem("cache_app_users", JSON.stringify(userList));
-        setAppUsersLoaded(true);
-
-        // Seeding super-admin owner if not present once loaded
-        const hasOwner = userList.some(
-          (u) => u.username === "glalavmlalav"
-        );
-        if (!hasOwner) {
-          setDoc(doc(db, "app_users", "glalavmlalav"), {
-            id: "glalavmlalav",
-            username: "glalavmlalav",
-            password: "admin",
-            email: "glalavmlalav@gmail.com",
-            name: "Super Admin (glalavmlalav)",
-            role: "super_admin",
-            business: "all",
-            createdAt: new Date().toISOString()
-          }).catch((err) => console.log("Owner seeding backup failed:", err));
-        }
-      },
-      (error) => {
-        console.warn("Error fetching admin users from Firestore on startup (using offline/local configuration):", error);
-        handleFirestoreError(error, OperationType.LIST, "app_users");
-        // Fallback to local cache so user doesn't see a blank screen
-        const cached = localStorage.getItem("cache_app_users");
-        if (cached) {
-          try {
-            setAppUsers(JSON.parse(cached));
-          } catch (e) {}
-        }
-        setAppUsersLoaded(true);
-      }
-    );
-
-    return () => {
-      unsubscribeAppUsers();
+      hasSubscribedEmployeesRef.current = false;
     };
   }, []);
+
+  // Manual Refresh / Sync Action
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    await reconnectFirestoreNetwork();
+    setDbError(null);
+    await Promise.allSettled([
+      fetchAppUsers(),
+      fetchSecondaryCollections()
+    ]);
+    setTimeout(() => {
+      setIsSyncing(false);
+    }, 500);
+  };
 
   // Recalculate alerts if employees update or system date changes
   useEffect(() => {
@@ -915,11 +900,17 @@ export default function App() {
   const handleAddUser = async (userFields: Omit<AppUser, "id" | "createdAt">) => {
     try {
       const docId = userFields.username.toLowerCase().trim();
-      await setDoc(doc(db, "app_users", docId), {
+      const newUser: AppUser = {
         id: docId,
         ...userFields,
         createdAt: new Date().toISOString()
+      };
+      setAppUsers((prev) => {
+        const updated = [...prev.filter((u) => u.id !== docId), newUser];
+        safeLocalStorageSetItem("cache_app_users", JSON.stringify(updated));
+        return updated;
       });
+      await setDoc(doc(db, "app_users", docId), newUser);
     } catch (e) {
       console.warn("Failed to write to cloud:", e);
       alert(language === "ku" ? "کێشەیەک ڕوویدا لە کاتی پاشەکەوتکردنی بەکارهێنەر" : "Error saving user credentials");
@@ -928,6 +919,11 @@ export default function App() {
 
   const handleDeleteUser = async (docId: string) => {
     try {
+      setAppUsers((prev) => {
+        const updated = prev.filter((u) => u.id !== docId);
+        safeLocalStorageSetItem("cache_app_users", JSON.stringify(updated));
+        return updated;
+      });
       await deleteDoc(doc(db, "app_users", docId));
     } catch (e) {
       console.warn("Failed to delete from cloud:", e);
@@ -1083,55 +1079,38 @@ export default function App() {
             </button>
           </div>
 
-          {/* Database Quota Error Offline Mode Notice */}
+          {/* Maintenance / Offline Mode Notice */}
           {dbError && (
             <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex flex-col gap-3 font-sans relative overflow-hidden text-amber-900 text-right animate-fade-in">
               <div className="absolute top-0 bottom-0 left-0 w-1 bg-amber-500" dir="ltr" />
               <div className="flex items-start gap-2.5">
-                <Database className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 animate-pulse" />
+                <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 animate-pulse" />
                 <div>
                   <h4 className="text-amber-950 text-xs font-black leading-normal block">
                     {language === "ku"
-                      ? "⚠️ دۆخی فریاگوزاری داتای ئۆفلاین کاراکراوە"
-                      : "⚠️ Cloud Database Offline (Active Cache Safety)"}
+                      ? "⚠️ سیستەمەکە لەژێر ئەپدێتکردن دایە !"
+                      : "⚠️ System Under Maintenance & Update"}
                   </h4>
                   <p className="text-slate-700 text-[11px] mt-1.5 leading-relaxed font-semibold">
                     {language === "ku"
-                      ? "سیستمی لایڤی سێرڤەر بەهۆی تێپەڕبوونی لیمیتی ٥٠،٠٠٠ خوێندنەوەی ڕۆژانەی بێبەرامبەر لەسەر فایەربەیس کاتیانە ڕاگیراوە. هیچ داتایەک نەسڕاوەتەوە! هەموو شتێک بە سەلامەتی کاردەکات بە شێوازی ئۆفلاین لەناو وێبگەڕەکەتدا."
-                      : "The live central Firestore database has temporary read-limits (50k daily free-tier views exceeded). Be fully reassured: no data is lost! The system is operating seamlessly offline using your browser's persistent cache."}
+                      ? "«سیستەمەکە لەژێر ئەپدەیتکردن دایە لە چەند کاتژمێری داهاتوو بەتەواوی ئامادە دەبێتەوە ، سوپاس بۆ چاوەروانیتان .»"
+                      : "The system is currently undergoing scheduled maintenance and updates. It will be fully ready in the upcoming hours. Thank you for your patience."}
                   </p>
                 </div>
               </div>
 
               {/* Utility actions inside the offline warning list */}
               <div className="flex flex-wrap gap-2 justify-end pt-2 border-t border-amber-500/15">
-                <label className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded-xl transition flex items-center justify-center gap-1 cursor-pointer border border-slate-950">
-                  <Upload className="w-3.5 h-3.5" />
-                  {language === "ku" ? "هاوردەکردنی باکئەپ" : "Import Backup File"}
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={handleImportBackup}
-                    className="hidden"
-                  />
-                </label>
-
-                <a
-                  href="https://console.firebase.google.com/project/lenya-design/firestore/databases/ai-studio-2ef4068b-e874-4e95-9f3b-5bad40829247/data?openUpgradeDialog=true"
-                  target="_blank"
-                  referrerPolicy="no-referrer"
-                  className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 text-[10px] font-black rounded-xl transition flex items-center justify-center gap-1 font-sans"
+                <button
+                  onClick={() => {
+                    setDbError(null);
+                    window.location.reload();
+                  }}
+                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-bold rounded-xl transition flex items-center justify-center gap-1 cursor-pointer border border-slate-950 font-sans"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  {language === "ku" ? "چارەسەرکردن ⚡" : "Upgrade Instance ⚡"}
-                </a>
-              </div>
-              
-              <div className="pt-2 border-t border-amber-500/15">
-                <span className="text-[9px] font-bold text-amber-800 uppercase tracking-wilder block mb-0.5">Detailed Quota Log:</span>
-                <p className="text-[10px] text-slate-500 font-mono bg-white/50 p-2 rounded-xl break-all leading-normal text-left" dir="ltr">
-                  {dbError.error}
-                </p>
+                  <RefreshCw className="w-3 h-3" />
+                  {language === "ku" ? "دووبارە پشکنینەوە" : "Check Again"}
+                </button>
               </div>
             </div>
           )}
@@ -1419,6 +1398,21 @@ export default function App() {
               </span>
             </div>
 
+            {/* Manual Sync Button */}
+            <button
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="flex items-center gap-1.5 px-3 py-1.5 lg:px-4 lg:py-2 bg-white/60 hover:bg-white text-slate-700 hover:text-slate-900 border border-slate-200 hover:border-slate-300 rounded-full text-xs font-bold transition shadow-2xs cursor-pointer disabled:opacity-60"
+              title={language === "ku" ? "نوێکردنەوەی داتاکان لە فایەربەیس" : "Sync Data from Cloud"}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-amber-500 ${isSyncing ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline font-sans text-[11px]">
+                {isSyncing 
+                  ? (language === "ku" ? "نوێدەبێتەوە..." : "Syncing...") 
+                  : (language === "ku" ? "نوێکردنەوە" : "Sync")}
+              </span>
+            </button>
+
             {/* System clock bubble */}
             <div className="flex items-center gap-1.5 bg-white/60 hover:bg-white/80 border border-slate-200 hover:border-slate-300 rounded-full px-3 py-1.5 lg:px-4 lg:py-2 shadow-sm transition-all text-xs font-bold text-slate-700 focus-within:ring-2 focus-within:ring-indigo-500/20">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
@@ -1440,7 +1434,7 @@ export default function App() {
         {/* Page Content viewport wrap and statistics grids */}
         <div className="p-6 lg:p-8 space-y-8 flex-1 bg-transparent overflow-y-auto relative z-10">
 
-          {/* Active Firebase Cloud Database Warning Banner */}
+          {/* Active Maintenance Notice */}
           {dbError && (
             <div className="glass-panel bg-amber-500/10 backdrop-blur-lg rounded-[28px] border border-amber-500/40 p-6 flex flex-col gap-6 shadow-md relative overflow-hidden animate-fade-in font-sans">
               <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-amber-500" />
@@ -1448,27 +1442,19 @@ export default function App() {
               <div className="flex flex-col md:flex-row items-start justify-between gap-6">
                 <div className="flex items-start gap-4">
                   <span className="p-3 bg-amber-500/20 border border-amber-400/40 text-amber-700 rounded-2xl flex-shrink-0 mt-1">
-                    <Database className="w-6 h-6 animate-pulse" />
+                    <Clock className="w-6 h-6 animate-pulse" />
                   </span>
                   <div>
                     <h4 className="text-amber-900 text-sm font-black leading-relaxed text-right">
                       {language === "ku" 
-                        ? "⚠️ ئاگاداری گرنگ: گۆڕانکاری پلانی فایەربەیس و نوێکردنەوە" 
-                        : "⚠️ Core Database Actions Blocked by Free Instance Quota"}
+                        ? "⚠️ سیستەمەکە لەژێر ئەپدێتکردن دایە !" 
+                        : "⚠️ System Under Maintenance & Update"}
                     </h4>
                     <p className="text-slate-700 text-[12px] mt-2 font-semibold leading-relaxed text-right">
                       {language === "ku" 
-                        ? "خوێندنەوەی لایڤی فایەربەیس بۆ ئەمڕۆ کۆتایی پێهاتووە (تێپەڕبوونی لیمیتی ٥٠،٠٠٠ خوێندنەوەی بێبەرامبەر). هەرچەندە پلانی باڵانسی فایەربەیس زیادکراوە، بەڵام پێویستە بنکەی داتاکەت خۆی (Database Instance) ڕاستەوخۆ کارا بکرێت لە ناو کۆنسۆلی گووگڵ فایەربەیس تا لیمیتەکەی لابرێت." 
-                        : "Your project's free-tier database reads constraint has been reached. Although your overall billing has been connected, you must manually initiate the Firestore instance upgrade modal in Google Cloud console to lift storage limits."}
+                        ? "«سیستەمەکە لەژێر ئەپدەیتکردن دایە لە چەند کاتژمێری داهاتوو بەتەواوی ئامادە دەبێتەوە ، سوپاس بۆ چاوەروانیتان .»" 
+                        : "The system is currently undergoing scheduled maintenance and updates. It will be fully ready in the upcoming hours. Thank you for your patience."}
                     </p>
-                    <div className="mt-3.5 p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-[12px] text-emerald-800 font-bold flex items-center gap-2 justify-end">
-                      <span>
-                        {language === "ku"
-                          ? "دڵنیابە: هیچ داتایەک نەسڕاوەتەوە! هەموو داتاکانت بە سەلامەتی ڕزگارکراون و ئێستا بە شێوەی ئۆفلاین پیشان دەدرێن."
-                          : "Be Reassured: No data is deleted! Everything you entered is fully cached and safely displayed offline below."}
-                      </span>
-                      <CheckCircle className="w-4.5 h-4.5 text-emerald-600 shrink-0" />
-                    </div>
                   </div>
                 </div>
  
@@ -1481,7 +1467,7 @@ export default function App() {
                       className="w-full text-center px-5 py-3 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-2xl text-[11px] uppercase tracking-wider transition duration-150 cursor-pointer shadow-sm hover:shadow-md flex items-center justify-center gap-2 border border-amber-600 font-sans"
                     >
                       <Sparkles className="w-4 h-4" />
-                      {language === "ku" ? "کلیک لێرە بکە بۆ چارەسەرکردن ⚡" : "Upgrade Database Instance ⚡"}
+                      {language === "ku" ? "بەشی بەڕێوەبەری سەرەکی ⚡" : "Super Admin Console ⚡"}
                     </a>
                   )}
  
@@ -1493,7 +1479,7 @@ export default function App() {
                     className="w-full px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white border border-slate-950 rounded-2xl text-[11px] font-bold tracking-wider transition duration-150 cursor-pointer shadow-sm flex items-center justify-center gap-1.5 font-sans"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    {language === "ku" ? "🔄 دووبارە تاقیکردنەوە" : "🔄 Refresh Connection"}
+                    {language === "ku" ? "🔄 دووبارە پشکنینەوە" : "🔄 Check Status"}
                   </button>
                 </div>
               </div>
@@ -1502,40 +1488,23 @@ export default function App() {
               <div className="mt-1 pt-4 border-t border-amber-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <span className="p-1.5 bg-amber-500/20 text-amber-800 rounded-lg">
-                    <Database className="w-4 h-4 shrink-0" />
+                    <ShieldCheck className="w-4 h-4 shrink-0" />
                   </span>
                   <span className="text-amber-900 text-xs font-bold leading-normal">
                     {language === "ku"
-                      ? "ئامرازەکانی ڕزگارکردنی لۆکاڵ (بۆ ئەوەی داتاکانت لای خۆت بمێننەوە):"
-                      : "Offline local recovery utilities (For local data persistence):"}
+                      ? "دڵنیایی: هەموو داتاکانت لە سیستمەکەدا پارێزراون."
+                      : "Reassurance: All your system data is safe and secured."}
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2.5 w-full sm:w-auto">
                   <button
                     onClick={handleExportBackup}
-                    className="flex-1 sm:flex-none px-4 py-2.5 bg-amber-500/25 hover:bg-amber-500/35 text-amber-950 border border-amber-500/40 text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="flex-1 sm:flex-none px-4 py-2 bg-amber-500/25 hover:bg-amber-500/35 text-amber-950 border border-amber-500/40 text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
-                    {language === "ku" ? "هەناردەکردنی داتا (باکئەپ)" : "Export local data (Backup)"}
+                    {language === "ku" ? "هەناردەکردنی باکئەپ" : "Export Backup"}
                   </button>
-                  <label className="flex-1 sm:flex-none px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer border border-slate-950">
-                    <Upload className="w-4 h-4" />
-                    {language === "ku" ? "هاوردەکردنی باکئەپ" : "Import Backup File"}
-                    <input
-                      type="file"
-                      accept=".json"
-                      onChange={handleImportBackup}
-                      className="hidden"
-                    />
-                  </label>
                 </div>
-              </div>
-
-              <div className="mt-1 pt-4 border-t border-amber-500/20">
-                <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block mb-1">Detailed Technical Context:</span>
-                <p className="text-[11px] text-zinc-600 font-mono bg-white/50 p-3 rounded-xl break-all leading-normal text-left" dir="ltr">
-                  {dbError.error}
-                </p>
               </div>
             </div>
           )}

@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore, enableIndexedDbPersistence, disableNetwork } from "firebase/firestore";
+import { getFirestore, enableIndexedDbPersistence, disableNetwork, enableNetwork } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
 // Initialize Firebase App
@@ -16,6 +16,15 @@ if (typeof window !== "undefined") {
   enableIndexedDbPersistence(db).catch((err) => {
     console.warn("Firestore persistence setup warning: ", err.message);
   });
+}
+
+export async function reconnectFirestoreNetwork(): Promise<void> {
+  try {
+    await enableNetwork(db);
+    console.log("Firestore network enabled / reconnected.");
+  } catch (err) {
+    console.warn("Could not re-enable Firestore network:", err);
+  }
 }
 
 export enum OperationType {
