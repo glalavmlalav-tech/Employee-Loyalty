@@ -237,17 +237,49 @@ export function formatDateToDDMMYYYY(dateStr: string | null | undefined): string
   return dateStr;
 }
 
+export const DEFAULT_NEW_DAYS_LIMIT = 10;
+
+export function getNewDaysLimit(): number {
+  try {
+    const saved = localStorage.getItem("setting_new_days_limit");
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return DEFAULT_NEW_DAYS_LIMIT;
+}
+
+export function setNewDaysLimit(days: number): void {
+  try {
+    localStorage.setItem("setting_new_days_limit", String(days));
+  } catch (e) {
+    // ignore
+  }
+}
+
 /**
- * Checks if an employee was newly entered into the system (up to 10 days)
+ * Checks if an employee was newly entered into the system (up to specified days limit, default 10)
  * based on EITHER the reference system date OR the actual real-world today's date.
  */
-export function isNewEmployee(emp: Employee, referenceDateStr: string = "2026-05-25"): boolean {
+export function isNewEmployee(
+  emp: Employee, 
+  referenceDateStr: string = "2026-05-25",
+  customDaysLimit?: number
+): boolean {
   try {
-    if (!emp.createdAt) return false;
+    const targetDateStr = emp.createdAt || emp.hireDate;
+    if (!targetDateStr) return false;
+
+    const daysLimit = typeof customDaysLimit === "number" && customDaysLimit > 0 
+      ? customDaysLimit 
+      : getNewDaysLimit();
 
     // 1. Check relative to referenceDateStr
-    const checkWithRef = (targetDateStr: string) => {
-      const cleanStr = targetDateStr.includes("T") ? targetDateStr.split("T")[0] : targetDateStr;
+    const checkWithRef = (dateStr: string) => {
+      const cleanStr = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
       const parts = cleanStr.split("-");
       if (parts.length !== 3) return false;
       const year = parseInt(parts[0]);
@@ -267,12 +299,12 @@ export function isNewEmployee(emp: Employee, referenceDateStr: string = "2026-05
       
       const diffTime = refDate.getTime() - empDate.getTime();
       const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && diffDays <= 10;
+      return diffDays >= 0 && diffDays <= daysLimit;
     };
 
     // 2. Check relative to actual real-world today
-    const checkWithRealToday = (targetDateStr: string) => {
-      const cleanStr = targetDateStr.includes("T") ? targetDateStr.split("T")[0] : targetDateStr;
+    const checkWithRealToday = (dateStr: string) => {
+      const cleanStr = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr;
       const parts = cleanStr.split("-");
       if (parts.length !== 3) return false;
       const year = parseInt(parts[0]);
@@ -286,12 +318,55 @@ export function isNewEmployee(emp: Employee, referenceDateStr: string = "2026-05
       
       const diffTime = today.getTime() - empDate.getTime();
       const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && diffDays <= 10;
+      return diffDays >= 0 && diffDays <= daysLimit;
     };
 
-    return checkWithRef(emp.createdAt) || checkWithRealToday(emp.createdAt);
+    return checkWithRef(targetDateStr) || checkWithRealToday(targetDateStr);
   } catch (e) {
     return false;
+  }
+}
+
+/**
+ * Returns how many days remain before the "new" badge expires for this employee.
+ */
+export function getNewEmployeeDaysRemaining(
+  emp: Employee,
+  referenceDateStr: string = "2026-05-25",
+  customDaysLimit?: number
+): number {
+  try {
+    const targetDateStr = emp.createdAt || emp.hireDate;
+    if (!targetDateStr) return 0;
+
+    const daysLimit = typeof customDaysLimit === "number" && customDaysLimit > 0 
+      ? customDaysLimit 
+      : getNewDaysLimit();
+
+    const cleanStr = targetDateStr.includes("T") ? targetDateStr.split("T")[0] : targetDateStr;
+    const parts = cleanStr.split("-");
+    if (parts.length !== 3) return 0;
+    const year = parseInt(parts[0]);
+    const month = parseInt(parts[1]) - 1;
+    const day = parseInt(parts[2]);
+
+    const refParts = referenceDateStr.split("-");
+    if (refParts.length !== 3) return 0;
+    const refYear = parseInt(refParts[0]);
+    const refMonth = parseInt(refParts[1]) - 1;
+    const refDay = parseInt(refParts[2]);
+
+    const empDate = new Date(year, month, day);
+    const refDate = new Date(refYear, refMonth, refDay);
+    empDate.setHours(0, 0, 0, 0);
+    refDate.setHours(0, 0, 0, 0);
+
+    const diffTime = refDate.getTime() - empDate.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    const remaining = daysLimit - diffDays;
+    return Math.max(0, remaining);
+  } catch (e) {
+    return 0;
   }
 }
 

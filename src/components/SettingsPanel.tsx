@@ -15,10 +15,13 @@ import {
   Zap,
   Check,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Sparkles,
+  Clock
 } from "lucide-react";
 import { AppUser, BusinessId, BUSINESSES, Employee } from "../types";
 import { compressImageBase64, needsCompression } from "../utils/imageCompression";
+import { getNewDaysLimit, setNewDaysLimit } from "../utils";
 
 interface SettingsPanelProps {
   appUsers: AppUser[];
@@ -49,6 +52,17 @@ export default function SettingsPanel({
   const [totalToProcess, setTotalToProcess] = useState(0);
   const [currentEmpName, setCurrentEmpName] = useState("");
   const [optimizedBytesSaved, setOptimizedBytesSaved] = useState(0);
+
+  // New badge duration settings state
+  const [newDaysLimit, setNewDaysLimitState] = useState<number>(() => getNewDaysLimit());
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
+
+  const handleSaveDaysLimit = (days: number) => {
+    setNewDaysLimitState(days);
+    setNewDaysLimit(days);
+    setSaveSuccessMsg(true);
+    setTimeout(() => setSaveSuccessMsg(false), 2500);
+  };
 
   // Find employees needing compression
   const uncompressedEmployees = employees.filter(needsCompression);
@@ -499,6 +513,63 @@ export default function SettingsPanel({
               <span>{uncompressedEmployees.length}</span>
               {uncompressedEmployees.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping inline-block" />}
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* New Badge Duration Settings for Super Admin */}
+      <div className="glass-panel rounded-[36px] p-6 lg:p-8 space-y-6 relative overflow-hidden border border-white/80 shadow-sm animate-fade-in text-right font-sans">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+          <div className="space-y-2 max-w-2xl">
+            <span className="text-[10px] bg-emerald-500/10 text-emerald-800 font-extrabold px-3 py-1.5 rounded-full border border-emerald-500/20 uppercase tracking-wider inline-flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              {language === "ku" ? "تایبەت بە بەڕێوەبەری سەرەکی (Super Admin)" : "Super Admin Privilege"}
+            </span>
+            <h3 className="text-xl md:text-2xl font-display font-black text-slate-800 flex items-center gap-2">
+              <span>{language === "ku" ? "دیاریکردنی ماوەی ئایکۆن و بەشی 'نوێ'" : "Configure 'NEW' Badge & Section Duration"}</span>
+            </h3>
+            <p className="text-slate-500 text-xs md:text-sm leading-relaxed">
+              {language === "ku" 
+                ? "دیاری بکە کە کارمەندی تازە تۆمارکراو بۆ ماوەی چەند ڕۆژ ئایکۆنی 'نوێ' لەسەر کارتەکەی بمێنێتەوە و لە بەشی فلتەری 'نوێ' بۆ سوپەر ئەدمین دیار بێت. لە دوای تەواوبوونی ئەم ڕۆژانە بە شێوەیەکی ئۆتۆماتیکی ئایکۆنەکە لادەچێت." 
+                : "Specify how many days newly registered employees keep the 'NEW' icon and remain visible in the Super Admin's 'New' section. Once this period expires, the badge is automatically cleared."}
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-slate-50/80 p-3 rounded-2xl border border-slate-200/60 shrink-0">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="text-xs font-bold text-slate-700">
+                {language === "ku" ? "ماوەی چالاک:" : "Current:"}
+              </span>
+              <span className="font-mono font-black text-sm text-emerald-700 px-2.5 py-0.5 bg-emerald-100 rounded-lg">
+                {newDaysLimit} {language === "ku" ? "ڕۆژ" : "days"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {[5, 7, 10, 15, 30].map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => handleSaveDaysLimit(days)}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer font-mono ${
+                    newDaysLimit === days
+                      ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400/30"
+                      : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200"
+                  }`}
+                  title={language === "ku" ? `گۆڕین بۆ ${days} ڕۆژ` : `Set to ${days} days`}
+                >
+                  {days} {language === "ku" ? "ڕۆژ" : "d"}
+                </button>
+              ))}
+            </div>
+
+            {saveSuccessMsg && (
+              <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 animate-fade-in">
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                {language === "ku" ? "پاشەکەوتکرا!" : "Saved!"}
+              </span>
+            )}
           </div>
         </div>
       </div>
