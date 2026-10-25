@@ -3,8 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>ستاف</title>
+    <title>ستاف - بەڕێوەبردنی کارمەندان و مۆڵەت</title>
     <meta name="description" content="سیستەمی بەڕێوەبردن و داواکاری مۆڵەتی کارمەندان" />
+
+    <script>
+      // Suppress harmless Vite HMR WebSocket disconnect errors in AI Studio iframe preview environment
+      window.addEventListener('error', function(e) {
+        if (e && (
+          (e.message && (e.message.includes('WebSocket') || e.message.includes('closed without opened'))) ||
+          (e.filename && e.filename.includes('@vite/client'))
+        )) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          return true;
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function(e) {
+        if (e && e.reason && String(e.reason).includes('WebSocket')) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+        }
+      }, true);
+    </script>
     
     <!-- PWA & Mobile Meta Tags for iPhone, iPad, and Android -->
     <meta name="theme-color" content="#0f172a" />
