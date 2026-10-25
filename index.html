@@ -7,23 +7,46 @@
     <meta name="description" content="سیستەمی بەڕێوەبردن و داواکاری مۆڵەتی کارمەندان" />
 
     <script>
-      // Suppress harmless Vite HMR WebSocket disconnect errors in AI Studio iframe preview environment
-      window.addEventListener('error', function(e) {
-        if (e && (
-          (e.message && (e.message.includes('WebSocket') || e.message.includes('closed without opened'))) ||
-          (e.filename && e.filename.includes('@vite/client'))
-        )) {
-          e.stopImmediatePropagation();
-          e.preventDefault();
-          return true;
-        }
-      }, true);
-      window.addEventListener('unhandledrejection', function(e) {
-        if (e && e.reason && String(e.reason).includes('WebSocket')) {
-          e.stopImmediatePropagation();
-          e.preventDefault();
-        }
-      }, true);
+      // Suppress harmless Vite HMR WebSocket disconnect errors & console.error in AI Studio iframe preview environment
+      (function() {
+        var origError = console.error;
+        console.error = function() {
+          var text = '';
+          for (var i = 0; i < arguments.length; i++) {
+            var arg = arguments[i];
+            if (arg instanceof Error) {
+              text += ' ' + arg.message + ' ' + (arg.stack || '');
+            } else {
+              text += ' ' + String(arg);
+            }
+          }
+          if (
+            text.includes('WebSocket closed without opened') || 
+            (text.includes('[vite]') && text.includes('WebSocket'))
+          ) {
+            return;
+          }
+          return origError.apply(console, arguments);
+        };
+
+        window.addEventListener('error', function(e) {
+          if (e && (
+            (e.message && (e.message.includes('WebSocket') || e.message.includes('closed without opened'))) ||
+            (e.filename && e.filename.includes('@vite/client'))
+          )) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e) {
+          if (e && e.reason && String(e.reason).includes('WebSocket')) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+          }
+        }, true);
+      })();
     </script>
     
     <!-- PWA & Mobile Meta Tags for iPhone, iPad, and Android -->
