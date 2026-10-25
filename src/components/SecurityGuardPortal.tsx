@@ -86,48 +86,13 @@ export default function SecurityGuardPortal({
   userSession,
   onDeleteLeaveRequest
 }: SecurityGuardPortalProps) {
-  // Super Admin / Developer authority
-  const [developerUnlocked, setDeveloperUnlocked] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return sessionStorage.getItem("dev_auth_unlocked") === "true";
-    }
-    return false;
-  });
-  const [showDeveloperModal, setShowDeveloperModal] = useState(false);
-  const [developerPasswordInput, setDeveloperPasswordInput] = useState("");
-  const [developerAuthError, setDeveloperAuthError] = useState("");
-
-  const isSuperAdmin = useMemo(() => {
-    return userSession?.role === "super_admin" || developerUnlocked;
-  }, [userSession, developerUnlocked]);
+  // Super Admin authority check (only active if super admin is logged in)
+  const isSuperAdmin = Boolean(userSession?.role === "super_admin");
 
   const [leaveToDelete, setLeaveToDelete] = useState<LeaveRequest | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const handleDeveloperUnlockSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const pass = developerPasswordInput.trim();
-    if (pass === "admin" || pass === "glalavmlalav" || pass === "123456") {
-      setDeveloperUnlocked(true);
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("dev_auth_unlocked", "true");
-      }
-      setShowDeveloperModal(false);
-      setDeveloperPasswordInput("");
-      setDeveloperAuthError("");
-    } else {
-      setDeveloperAuthError(language === "ku" ? "تێپەڕەوشەی سوپەر ئەدمین هەڵەیە." : "Incorrect super admin password.");
-    }
-  };
-
-  const handleLockDeveloper = () => {
-    setDeveloperUnlocked(false);
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("dev_auth_unlocked");
-    }
-  };
-
-  // Direct real-time deletion
+  // Direct real-time deletion for Super Admin
   const handleDirectDelete = async (id?: string) => {
     const targetId = id || leaveToDelete?.id;
     if (!targetId) return;
@@ -352,54 +317,12 @@ export default function SecurityGuardPortal({
               <span className="hidden sm:inline">{language === "ku" ? "نوێکردنەوە" : "Sync"}</span>
             </button>
 
-            {/* Copy Public Link Button */}
-            <button
-              onClick={handleCopyPublicLink}
-              title={language === "ku" ? "کۆپیکردنی لینکی گشتی پاسەوان" : "Copy public link"}
-              className="p-2 sm:px-3 sm:py-1.5 bg-teal-500/10 hover:bg-teal-500/20 border border-teal-500/30 rounded-xl text-xs font-bold text-teal-300 transition flex items-center gap-1.5 cursor-pointer"
-            >
-              {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">
-                {copiedLink ? (language === "ku" ? "لینک کۆپیکرا!" : "Copied!") : (language === "ku" ? "کۆپیکردنی بەستەر" : "Share Link")}
-              </span>
-            </button>
-
-            {/* Super Admin Status or Unlock Trigger */}
-            {isSuperAdmin ? (
+            {/* Super Admin Badge (only shown when an active super admin session exists) */}
+            {isSuperAdmin && (
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-bold shadow-xs">
                 <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">{language === "ku" ? "سوپەر ئەدمین" : "Super Admin"}</span>
-                {developerUnlocked && (
-                  <button
-                    onClick={handleLockDeveloper}
-                    title={language === "ku" ? "داخستنی دەسەڵات" : "Lock"}
-                    className="p-0.5 hover:text-white transition ml-0.5 cursor-pointer text-amber-400"
-                  >
-                    <Lock className="w-3 h-3" />
-                  </button>
-                )}
+                <span className="hidden sm:inline">{language === "ku" ? "دەسەڵاتی سوپەر ئەدمین" : "Super Admin"}</span>
               </div>
-            ) : (
-              <button
-                onClick={() => setShowDeveloperModal(true)}
-                title={language === "ku" ? "دەسەڵاتی گەشەپێدەر / سوپەر ئەدمین (بۆ سڕینەوە)" : "Developer / Super Admin Access"}
-                className="p-2 sm:px-2.5 sm:py-1.5 bg-slate-800/60 hover:bg-slate-700 border border-slate-700/60 rounded-xl text-xs font-bold text-slate-400 hover:text-amber-400 transition flex items-center gap-1 cursor-pointer"
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span className="hidden xl:inline text-[11px]">{language === "ku" ? "گەشەپێدەر" : "Dev"}</span>
-              </button>
-            )}
-
-            {/* Go to Admin Login (if user wants admin panel) */}
-            {onGoToLogin && (
-              <button
-                onClick={onGoToLogin}
-                className="p-2 sm:px-3 sm:py-1.5 bg-slate-800/60 hover:bg-slate-700 border border-slate-700/60 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
-                title={language === "ku" ? "چوونەژوورەوەی ئەدمین و ستاف" : "Staff Login"}
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">{language === "ku" ? "ئەدمین" : "Login"}</span>
-              </button>
             )}
           </div>
         </div>
@@ -913,73 +836,6 @@ export default function SecurityGuardPortal({
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Developer Unlock Modal for Super Admin */}
-      {showDeveloperModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <form 
-            onSubmit={handleDeveloperUnlockSubmit}
-            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl animate-in fade-in zoom-in-95 space-y-4 text-start font-sans"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                <KeyRound className="w-5 h-5 stroke-[2.5]" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-white">
-                  {language === "ku" ? "دەسەڵاتی سوپەر ئەدمین / گەشەپێدەر" : "Super Admin / Developer Access"}
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  {language === "ku" ? "بۆ سڕینەوەی مۆڵەت و کۆنترۆڵی فەرمی" : "For leave deletion and override control"}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-300 block">
-                {language === "ku" ? "تێپەڕەوشەی سوپەر ئەدمین بنووسە:" : "Enter Super Admin Password:"}
-              </label>
-              <input
-                type="password"
-                value={developerPasswordInput}
-                onChange={(e) => {
-                  setDeveloperPasswordInput(e.target.value);
-                  setDeveloperAuthError("");
-                }}
-                placeholder="••••••"
-                autoFocus
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
-              />
-              {developerAuthError && (
-                <p className="text-[11px] text-rose-400 font-semibold mt-1">
-                  {developerAuthError}
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDeveloperModal(false);
-                  setDeveloperPasswordInput("");
-                  setDeveloperAuthError("");
-                }}
-                className="px-3.5 py-2 text-xs font-bold text-slate-400 hover:text-white rounded-xl transition cursor-pointer"
-              >
-                {language === "ku" ? "داخستن" : "Cancel"}
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-xl transition flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer"
-              >
-                <Unlock className="w-3.5 h-3.5" />
-                <span>{language === "ku" ? "چالاککردن" : "Unlock"}</span>
-              </button>
-            </div>
-          </form>
         </div>
       )}
     </div>
