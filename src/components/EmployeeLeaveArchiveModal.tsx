@@ -17,7 +17,7 @@ import {
   ShieldCheck,
   Check
 } from "lucide-react";
-import { Employee, LeaveRequest, BUSINESSES } from "../types";
+import { Employee, LeaveRequest, BUSINESSES, AppUser } from "../types";
 import { formatDateToDDMMYYYY } from "../utils";
 import PrintableLeaveForm from "./PrintableLeaveForm";
 
@@ -28,6 +28,7 @@ interface EmployeeLeaveArchiveModalProps {
   onDeleteLeaveRequest: (id: string) => Promise<void>;
   onClose: () => void;
   language?: "ku" | "en";
+  userSession?: { role?: string; [key: string]: any } | null;
 }
 
 export default function EmployeeLeaveArchiveModal({
@@ -36,8 +37,10 @@ export default function EmployeeLeaveArchiveModal({
   onOpenNewLeaveModal,
   onDeleteLeaveRequest,
   onClose,
-  language = "ku"
+  language = "ku",
+  userSession
 }: EmployeeLeaveArchiveModalProps) {
+  const isSuperAdmin = userSession?.role === "super_admin";
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [viewingLeave, setViewingLeave] = useState<LeaveRequest | null>(null);
@@ -349,14 +352,16 @@ export default function EmployeeLeaveArchiveModal({
                         <span>{language === "ku" ? "فۆڕمی فەرمی / چاپ" : "View / Print"}</span>
                       </button>
 
-                      <button
-                        onClick={() => handleDelete(leave.id)}
-                        disabled={deletingId === leave.id}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
-                        title={language === "ku" ? "سڕینەوەی ئەم فۆرمە" : "Delete this leave record"}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => handleDelete(leave.id)}
+                          disabled={deletingId === leave.id}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                          title={language === "ku" ? "سڕینەوەی ئەم فۆرمە (تەنیا سوپەر ئەدمین)" : "Delete this leave record (Super Admin only)"}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -475,6 +480,8 @@ export default function EmployeeLeaveArchiveModal({
           leave={viewingLeave}
           onClose={() => setViewingLeave(null)}
           language={language}
+          isSuperAdmin={isSuperAdmin}
+          onDelete={onDeleteLeaveRequest}
         />
       )}
     </div>

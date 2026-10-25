@@ -3158,6 +3158,7 @@ export default function EmployeeDirectory({
         <EmployeeLeaveArchiveModal
           employee={selectedArchiveEmployee}
           leaveRequests={leaveRequests || []}
+          userSession={userSession}
           onOpenNewLeaveModal={(emp) => {
             setSelectedArchiveEmployee(null);
             setSelectedLeaveEmployee(emp);

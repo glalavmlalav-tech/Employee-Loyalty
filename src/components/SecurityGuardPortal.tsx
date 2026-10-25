@@ -20,15 +20,18 @@ import {
   AlertTriangle,
   ChevronRight,
   Shield,
-  Wifi,
-  Radio
+  Trash2,
+  Lock,
+  Unlock,
+  KeyRound,
+  ShieldAlert
 } from "lucide-react";
-import { LeaveRequest, BUSINESSES, BusinessId } from "../types";
+import { LeaveRequest, BUSINESSES, BusinessId, AppUser } from "../types";
 import { formatDateToDDMMYYYY } from "../utils";
 import AppLogo from "./AppLogo";
 import PrintableLeaveForm from "./PrintableLeaveForm";
 import PWAInstallButton from "./PWAInstallButton";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, onSnapshot, doc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 interface SecurityGuardPortalProps {
@@ -37,6 +40,8 @@ interface SecurityGuardPortalProps {
   onRefresh?: () => Promise<void> | void;
   onGoToLogin?: () => void;
   language?: "ku" | "en";
+  userSession?: AppUser | null;
+  onDeleteLeaveRequest?: (id: string) => Promise<void>;
 }
 
 const cleanDateStr = (val?: string) => {
@@ -77,8 +82,74 @@ export default function SecurityGuardPortal({
   systemDate,
   onRefresh,
   onGoToLogin,
-  language = "ku"
+  language = "ku",
+  userSession,
+  onDeleteLeaveRequest
 }: SecurityGuardPortalProps) {
+  // Super Admin / Developer authority
+  const [developerUnlocked, setDeveloperUnlocked] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("dev_auth_unlocked") === "true";
+    }
+    return false;
+  });
+  const [showDeveloperModal, setShowDeveloperModal] = useState(false);
+  const [developerPasswordInput, setDeveloperPasswordInput] = useState("");
+  const [developerAuthError, setDeveloperAuthError] = useState("");
+
+  const isSuperAdmin = useMemo(() => {
+    return userSession?.role === "super_admin" || developerUnlocked;
+  }, [userSession, developerUnlocked]);
+
+  const [leaveToDelete, setLeaveToDelete] = useState<LeaveRequest | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeveloperUnlockSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pass = developerPasswordInput.trim();
+    if (pass === "admin" || pass === "glalavmlalav" || pass === "123456") {
+      setDeveloperUnlocked(true);
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("dev_auth_unlocked", "true");
+      }
+      setShowDeveloperModal(false);
+      setDeveloperPasswordInput("");
+      setDeveloperAuthError("");
+    } else {
+      setDeveloperAuthError(language === "ku" ? "تێپەڕەوشەی سوپەر ئەدمین هەڵەیە." : "Incorrect super admin password.");
+    }
+  };
+
+  const handleLockDeveloper = () => {
+    setDeveloperUnlocked(false);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("dev_auth_unlocked");
+    }
+  };
+
+  // Direct real-time deletion
+  const handleDirectDelete = async (id?: string) => {
+    const targetId = id || leaveToDelete?.id;
+    if (!targetId) return;
+    try {
+      setIsDeleting(true);
+      if (onDeleteLeaveRequest) {
+        await onDeleteLeaveRequest(targetId);
+      } else {
+        await deleteDoc(doc(db, "leave_requests", targetId));
+      }
+      setLiveLeaves(prev => prev.filter(l => l.id !== targetId));
+      setLeaveToDelete(null);
+      if (inspectingLeave && inspectingLeave.id === targetId) {
+        setInspectingLeave(null);
+      }
+    } catch (err) {
+      console.error("Failed to delete leave request:", err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Today's real local date string (YYYY-MM-DD)
   const realTodayString = useMemo(() => {
     const d = new Date();
@@ -292,6 +363,32 @@ export default function SecurityGuardPortal({
                 {copiedLink ? (language === "ku" ? "لینک کۆپیکرا!" : "Copied!") : (language === "ku" ? "کۆپیکردنی بەستەر" : "Share Link")}
               </span>
             </button>
+
+            {/* Super Admin Status or Unlock Trigger */}
+            {isSuperAdmin ? (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/15 border border-amber-500/30 rounded-xl text-amber-300 text-xs font-bold shadow-xs">
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">{language === "ku" ? "سوپەر ئەدمین" : "Super Admin"}</span>
+                {developerUnlocked && (
+                  <button
+                    onClick={handleLockDeveloper}
+                    title={language === "ku" ? "داخستنی دەسەڵات" : "Lock"}
+                    className="p-0.5 hover:text-white transition ml-0.5 cursor-pointer text-amber-400"
+                  >
+                    <Lock className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowDeveloperModal(true)}
+                title={language === "ku" ? "دەسەڵاتی گەشەپێدەر / سوپەر ئەدمین (بۆ سڕینەوە)" : "Developer / Super Admin Access"}
+                className="p-2 sm:px-2.5 sm:py-1.5 bg-slate-800/60 hover:bg-slate-700 border border-slate-700/60 rounded-xl text-xs font-bold text-slate-400 hover:text-amber-400 transition flex items-center gap-1 cursor-pointer"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span className="hidden xl:inline text-[11px]">{language === "ku" ? "گەشەپێدەر" : "Dev"}</span>
+              </button>
+            )}
 
             {/* Go to Admin Login (if user wants admin panel) */}
             {onGoToLogin && (
@@ -705,14 +802,34 @@ export default function SecurityGuardPortal({
 
                   </div>
 
-                  {/* Action: Open Full Official Printable Form */}
-                  <button
-                    onClick={() => setInspectingLeave(leave)}
-                    className="w-full mt-2 py-2.5 px-4 bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-teal-500/10 active:scale-[0.98] cursor-pointer"
-                  >
-                    <Eye className="w-4 h-4" />
-                    {language === "ku" ? "بینینی تەواوی فۆڕمەکە (وردەکاری)" : "View Official Leave Form"}
-                  </button>
+                  {/* Action: Open Full Official Printable Form & Super Admin Delete */}
+                  {isSuperAdmin ? (
+                    <div className="flex items-center gap-2 mt-2">
+                      <button
+                        onClick={() => setInspectingLeave(leave)}
+                        className="flex-1 py-2.5 px-3 bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs rounded-xl transition flex items-center justify-center gap-1.5 shadow-md shadow-teal-500/10 active:scale-[0.98] cursor-pointer"
+                      >
+                        <Eye className="w-4 h-4" />
+                        <span className="truncate">{language === "ku" ? "بینینی فۆڕم (وردەکاری)" : "View Official Form"}</span>
+                      </button>
+                      <button
+                        onClick={() => setLeaveToDelete(leave)}
+                        className="py-2.5 px-3.5 bg-rose-500/15 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/30 rounded-xl transition flex items-center justify-center gap-1.5 text-xs font-bold shadow-sm active:scale-95 cursor-pointer shrink-0"
+                        title={language === "ku" ? "سڕینەوەی ئەم مۆڵەتە (تەنیا دەسەڵاتی سوپەر ئەدمین)" : "Delete Leave (Super Admin Only)"}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span className="hidden sm:inline">{language === "ku" ? "سڕینەوە" : "Delete"}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setInspectingLeave(leave)}
+                      className="w-full mt-2 py-2.5 px-4 bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-md shadow-teal-500/10 active:scale-[0.98] cursor-pointer"
+                    >
+                      <Eye className="w-4 h-4" />
+                      {language === "ku" ? "بینینی تەواوی فۆڕمەکە (وردەکاری)" : "View Official Leave Form"}
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -745,7 +862,125 @@ export default function SecurityGuardPortal({
           leave={inspectingLeave}
           onClose={() => setInspectingLeave(null)}
           language={language}
+          isSuperAdmin={isSuperAdmin}
+          onDelete={handleDirectDelete}
         />
+      )}
+
+      {/* Super Admin Delete Confirmation Modal */}
+      {leaveToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl animate-in fade-in zoom-in-95 space-y-4 text-start font-sans">
+            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400">
+              <AlertTriangle className="w-6 h-6 stroke-[2.5]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono text-[10px] font-bold">
+                  {language === "ku" ? "تەنیا دەسەڵاتی سوپەر ئەدمین" : "Super Admin Privilege"}
+                </span>
+                <span className="text-slate-400 text-xs font-mono">
+                  #{leaveToDelete.formNumber}
+                </span>
+              </div>
+              <h3 className="text-base font-black text-white mt-1">
+                {language === "ku" ? "سڕینەوەی هەمیشەیی ئەم مۆڵەتە" : "Permanently Delete Leave Pass?"}
+              </h3>
+              <p className="text-xs text-slate-300 mt-2 leading-relaxed">
+                {language === "ku" 
+                  ? `ئایا دڵنیایت لە سڕینەوەی مۆڵەتی فۆڕمی (#${leaveToDelete.formNumber}) بۆ کارمەند (${leaveToDelete.employeeName})؟ ئەم مۆڵەتە بە تەواوی لە داتابەیسی Firestore دەسڕدرێتەوە و لەسەر هەموو مۆبایل و دەروازەکان نامێنێت.`
+                  : `Are you sure you want to permanently delete leave pass #${leaveToDelete.formNumber} for ${leaveToDelete.employeeName}? It will be removed from Firestore and all devices.`}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setLeaveToDelete(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 text-xs font-bold text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+              >
+                {language === "ku" ? "پەشیمانبوونەوە" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDirectDelete(leaveToDelete.id)}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-black rounded-xl transition flex items-center gap-1.5 shadow-md shadow-rose-500/30 cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{isDeleting ? (language === "ku" ? "دەسڕدرێتەوە..." : "Deleting...") : (language === "ku" ? "بەڵێ، بسڕەوە" : "Yes, Delete")}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Developer Unlock Modal for Super Admin */}
+      {showDeveloperModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <form 
+            onSubmit={handleDeveloperUnlockSubmit}
+            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl animate-in fade-in zoom-in-95 space-y-4 text-start font-sans"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                <KeyRound className="w-5 h-5 stroke-[2.5]" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-white">
+                  {language === "ku" ? "دەسەڵاتی سوپەر ئەدمین / گەشەپێدەر" : "Super Admin / Developer Access"}
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  {language === "ku" ? "بۆ سڕینەوەی مۆڵەت و کۆنترۆڵی فەرمی" : "For leave deletion and override control"}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 block">
+                {language === "ku" ? "تێپەڕەوشەی سوپەر ئەدمین بنووسە:" : "Enter Super Admin Password:"}
+              </label>
+              <input
+                type="password"
+                value={developerPasswordInput}
+                onChange={(e) => {
+                  setDeveloperPasswordInput(e.target.value);
+                  setDeveloperAuthError("");
+                }}
+                placeholder="••••••"
+                autoFocus
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+              />
+              {developerAuthError && (
+                <p className="text-[11px] text-rose-400 font-semibold mt-1">
+                  {developerAuthError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeveloperModal(false);
+                  setDeveloperPasswordInput("");
+                  setDeveloperAuthError("");
+                }}
+                className="px-3.5 py-2 text-xs font-bold text-slate-400 hover:text-white rounded-xl transition cursor-pointer"
+              >
+                {language === "ku" ? "داخستن" : "Cancel"}
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black rounded-xl transition flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer"
+              >
+                <Unlock className="w-3.5 h-3.5" />
+                <span>{language === "ku" ? "چالاککردن" : "Unlock"}</span>
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </div>
   );

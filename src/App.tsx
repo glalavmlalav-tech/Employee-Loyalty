@@ -1206,6 +1206,8 @@ export default function App() {
         onRefresh={handleManualSync}
         onGoToLogin={navigateToAdmin}
         language={language}
+        userSession={userSession}
+        onDeleteLeaveRequest={deleteLeaveRequestFromFirestore}
       />
     );
   }
