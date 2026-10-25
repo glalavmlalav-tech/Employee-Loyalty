@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
@@ -9,7 +10,69 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "15mb" }));
+
+// In-memory cache for developer uploaded custom PWA icons
+let inMemoryCustomIconBuffer: Buffer | null = null;
+
+// Read existing uploaded icon if saved
+try {
+  const pwa512Path = path.join(process.cwd(), "public", "pwa-512x512.png");
+  if (fs.existsSync(pwa512Path)) {
+    inMemoryCustomIconBuffer = fs.readFileSync(pwa512Path);
+  }
+} catch (e) {}
+
+// Serve custom uploaded PWA icon if available
+app.get(["/apple-touch-icon.png", "/pwa-192x192.png", "/pwa-512x512.png", "/pwa-maskable-512x512.png"], (req, res, next) => {
+  if (inMemoryCustomIconBuffer) {
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-cache");
+    return res.send(inMemoryCustomIconBuffer);
+  }
+  next();
+});
+
+// Endpoint to update PWA icons dynamically when developer uploads custom logo
+app.post("/api/pwa/update-icons", (req, res) => {
+  try {
+    const { logoDataUrl } = req.body;
+    if (!logoDataUrl || typeof logoDataUrl !== "string") {
+      return res.status(400).json({ error: "Invalid logo data" });
+    }
+
+    const base64Data = logoDataUrl.replace(/^data:image\/\w+;base64,/, "");
+    const imgBuffer = Buffer.from(base64Data, "base64");
+    inMemoryCustomIconBuffer = imgBuffer;
+
+    const publicDir = path.join(process.cwd(), "public");
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+
+    fs.writeFileSync(path.join(publicDir, "pwa-512x512.png"), imgBuffer);
+    fs.writeFileSync(path.join(publicDir, "pwa-192x192.png"), imgBuffer);
+    fs.writeFileSync(path.join(publicDir, "pwa-maskable-512x512.png"), imgBuffer);
+    fs.writeFileSync(path.join(publicDir, "apple-touch-icon.png"), imgBuffer);
+
+    // Also write to dist/ if dist exists
+    const distDir = path.join(process.cwd(), "dist");
+    if (fs.existsSync(distDir)) {
+      try {
+        fs.writeFileSync(path.join(distDir, "pwa-512x512.png"), imgBuffer);
+        fs.writeFileSync(path.join(distDir, "pwa-192x192.png"), imgBuffer);
+        fs.writeFileSync(path.join(distDir, "pwa-maskable-512x512.png"), imgBuffer);
+        fs.writeFileSync(path.join(distDir, "apple-touch-icon.png"), imgBuffer);
+      } catch (e) {}
+    }
+
+    console.log("Custom PWA icons updated on disk successfully.");
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error("Error updating PWA icons:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Lazy-initialization of GoogleGenAI SDK to prevent app crash if API key is missing
 let aiInstance: GoogleGenAI | null = null;

@@ -27,6 +27,7 @@ import { LeaveRequest, BUSINESSES, BusinessId } from "../types";
 import { formatDateToDDMMYYYY } from "../utils";
 import AppLogo from "./AppLogo";
 import PrintableLeaveForm from "./PrintableLeaveForm";
+import PWAInstallButton from "./PWAInstallButton";
 
 interface SecurityGuardPortalProps {
   leaveRequests: LeaveRequest[];
@@ -203,6 +204,9 @@ export default function SecurityGuardPortal({
                 {currentTime}
               </span>
             </div>
+
+            {/* PWA Install Button for Security Tablets / iPad / Mobile */}
+            <PWAInstallButton language={language} variant="header" />
 
             {/* Refresh Button */}
             <button

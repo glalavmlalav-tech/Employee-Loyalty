@@ -119,6 +119,7 @@ export default function LeaveRequestModal({
   const sameBranchColleagues = useMemo(() => {
     return colleagues.filter(c => {
       if (c.id === employee.id) return false;
+      if (c.isDeleted) return false;
       const isActive = !c.status || c.status === "active";
       if (!isActive) return false;
       return normalizeBiz(c.business) === targetBusiness;

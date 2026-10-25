@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <rect width="100" height="100" rx="24" fill="#0f172a"/>
+  <defs>
+    <g id="logo-arm">
+      <path d="M 40,16 L 58,16 L 58,42 C 58,50 63,54 72,48 L 80,42 L 89,52 L 73,66 C 60,77 40,66 40,48 Z" fill="#f59e0b"/>
+    </g>
+  </defs>
+  <use href="#logo-arm"/>
+  <use href="#logo-arm" transform="rotate(120 50 50)"/>
+  <use href="#logo-arm" transform="rotate(240 50 50)"/>
+</svg>

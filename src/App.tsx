@@ -59,6 +59,7 @@ import MonthlyCelebrations from "./components/MonthlyCelebrations";
 import WhatsAppComposerModal from "./components/WhatsAppComposerModal";
 import TrashPanel from "./components/TrashPanel";
 import SecurityGuardPortal from "./components/SecurityGuardPortal";
+import PWAInstallButton from "./components/PWAInstallButton";
 import { initLogoSync } from "./utils/logoManager";
 
 const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
@@ -346,12 +347,18 @@ export default function App() {
 
   // Monitor Authentication - auto sign in with Google or keep anonymous for guests
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setAuthLoading(false);
+    }, 1200);
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      clearTimeout(timer);
       if (!user) {
         try {
           await signInAnonymously(auth);
         } catch (e) {
-          console.warn("Anonymous authentication check completed (not signed in):", e);
+          console.warn("Anonymous auth notice (standard google auth active):", e);
+        } finally {
           setAuthLoading(false);
         }
       } else {
@@ -359,7 +366,10 @@ export default function App() {
         setAuthLoading(false);
       }
     });
-    return unsubscribe;
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+    };
   }, []);
 
   // Sync Google Account verified session state with corporate workspace roles
@@ -1179,6 +1189,19 @@ export default function App() {
     }).length;
   })();
 
+  // Public Security Guard Portal (strictly for entrance security guards, no login required)
+  if (isSecurityPortalView) {
+    return (
+      <SecurityGuardPortal
+        leaveRequests={leaveRequests}
+        systemDate={systemDate}
+        onRefresh={handleManualSync}
+        onGoToLogin={navigateToAdmin}
+        language={language}
+      />
+    );
+  }
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-[#f3ece6] flex flex-col items-center justify-center p-6 text-center relative overflow-hidden">
@@ -1192,19 +1215,6 @@ export default function App() {
           <p className="text-slate-400 text-xs font-medium">Initializing Secure Firewalls...</p>
         </div>
       </div>
-    );
-  }
-
-  // Public Security Guard Portal (strictly for entrance security guards, no login required)
-  if (isSecurityPortalView) {
-    return (
-      <SecurityGuardPortal
-        leaveRequests={leaveRequests}
-        systemDate={systemDate}
-        onRefresh={handleManualSync}
-        onGoToLogin={navigateToAdmin}
-        language={language}
-      />
     );
   }
 
@@ -1222,8 +1232,9 @@ export default function App() {
         <div className="max-w-md w-full glass-panel rounded-[36px] p-8 md:p-10 shadow-[0_32px_64px_-12px_rgba(100,116,139,0.18)] relative overflow-hidden z-10 animate-fade-in" id="login_block">
           <div className="absolute top-0 right-0 left-0 h-2 bg-gradient-to-r from-amber-400 via-rose-400 to-cyan-400" />
           
-          {/* Header language toggle */}
-          <div className="flex justify-end mb-4">
+          {/* Header language toggle and PWA Install */}
+          <div className="flex justify-between items-center mb-4">
+            <PWAInstallButton variant="minimal" language={language} />
             <button
               onClick={() => setLanguage(language === "ku" ? "en" : "ku")}
               className="text-xs glass-btn-secondary px-3.5 py-2 rounded-xl flex items-center gap-1.5 font-bold text-slate-700 hover:text-slate-900 shadow-sm transition"
@@ -1475,6 +1486,11 @@ export default function App() {
               </div>
             </button>
           </div>
+
+          {/* PWA Mobile & iPad Install Card */}
+          <div className="pt-2">
+            <PWAInstallButton variant="sidebar" language={language} />
+          </div>
         </nav>
 
         {/* Sync Info Profile box in sidebar */}
@@ -1574,6 +1590,9 @@ export default function App() {
                 Live Sync Active
               </span>
             </div>
+
+            {/* PWA App Install Button for Mobile & iPad */}
+            <PWAInstallButton variant="header" language={language} />
 
             {/* Manual Sync Button */}
             <button

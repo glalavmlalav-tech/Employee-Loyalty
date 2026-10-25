@@ -62,7 +62,7 @@ export function useCustomLogo(): string | null {
 }
 
 /**
- * Broadcasts the updated logo to all mounted React components & updates favicon
+ * Broadcasts the updated logo to all mounted React components & updates favicon and PWA icons
  */
 function broadcastLogoChange(newLogo: string | null) {
   currentLogo = newLogo;
@@ -74,7 +74,119 @@ function broadcastLogoChange(newLogo: string | null) {
     }
   }
   updateAppFavicon(newLogo);
+  updatePWAIconsAndManifest(newLogo);
   listeners.forEach((l) => l(newLogo));
+}
+
+const PWA_ICON_STORAGE_KEY = "custom_pwa_icon_512";
+let dynamicManifestUrl: string | null = null;
+
+export async function createPWAIconFromLogo(logoDataUrl: string, size = 512): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        resolve(logoDataUrl);
+        return;
+      }
+
+      // Crisp clean white background with gentle padding for high-fidelity iOS & Android home screens
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, size, size);
+
+      // Centered with safe maskable margins
+      const maxLogoW = size * 0.74;
+      const maxLogoH = size * 0.74;
+      let drawW = img.width;
+      let drawH = img.height;
+
+      const scale = Math.min(maxLogoW / drawW, maxLogoH / drawH);
+      drawW = drawW * scale;
+      drawH = drawH * scale;
+
+      const offsetX = (size - drawW) / 2;
+      const offsetY = (size - drawH) / 2;
+
+      ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
+      const generatedDataUrl = canvas.toDataURL("image/png");
+      resolve(generatedDataUrl);
+    };
+    img.onerror = () => {
+      resolve(logoDataUrl);
+    };
+    img.src = logoDataUrl;
+  });
+}
+
+/**
+ * Dynamically updates <link rel="apple-touch-icon"> and <link rel="manifest">
+ * so installed PWAs on iPad, iPhone, and Android use the developer's uploaded custom logo
+ */
+export function updatePWAIconsAndManifest(logoUrl: string | null) {
+  if (typeof document === "undefined") return;
+
+  try {
+    let appleLink: HTMLLinkElement | null = document.querySelector("link[rel='apple-touch-icon']");
+    if (!appleLink) {
+      appleLink = document.createElement("link");
+      appleLink.rel = "apple-touch-icon";
+      document.head.appendChild(appleLink);
+    }
+
+    let manifestLink: HTMLLinkElement | null = document.querySelector("link[rel='manifest']");
+    if (!manifestLink) {
+      manifestLink = document.createElement("link");
+      manifestLink.rel = "manifest";
+      document.head.appendChild(manifestLink);
+    }
+
+    if (!logoUrl) {
+      appleLink.href = "/apple-touch-icon.png";
+      manifestLink.href = "/manifest.webmanifest";
+      try {
+        localStorage.removeItem(PWA_ICON_STORAGE_KEY);
+      } catch (e) {}
+      return;
+    }
+
+    const applyPwaIcon = (iconDataUrl: string) => {
+      if (appleLink) {
+        appleLink.href = iconDataUrl;
+      }
+      // Manifest MUST remain a valid HTTP URL (/manifest.webmanifest) for W3C/Chromium PWA spec compliance
+      manifestLink.href = "/manifest.webmanifest";
+    };
+
+    // If cached PWA icon exists, apply immediately
+    const cachedPwaIcon = (() => {
+      try {
+        return localStorage.getItem(PWA_ICON_STORAGE_KEY);
+      } catch {
+        return null;
+      }
+    })();
+
+    if (cachedPwaIcon) {
+      applyPwaIcon(cachedPwaIcon);
+    }
+
+    // Generate fresh PWA icon from logo
+    createPWAIconFromLogo(logoUrl, 512).then((iconDataUrl) => {
+      try {
+        localStorage.setItem(PWA_ICON_STORAGE_KEY, iconDataUrl);
+      } catch (e) {}
+      applyPwaIcon(iconDataUrl);
+    }).catch(() => {
+      applyPwaIcon(logoUrl);
+    });
+  } catch (err) {
+    console.warn("Could not update PWA icons and manifest:", err);
+  }
 }
 
 // Real-time Firestore sync listener
@@ -84,9 +196,10 @@ export function initLogoSync() {
   if (isSyncInitialized || typeof window === "undefined") return;
   isSyncInitialized = true;
 
-  // Immediately apply initial cached logo to browser favicon
+  // Immediately apply initial cached logo to browser favicon and PWA icons
   if (currentLogo) {
     updateAppFavicon(currentLogo);
+    updatePWAIconsAndManifest(currentLogo);
   }
 
   try {
@@ -116,6 +229,16 @@ export function initLogoSync() {
  */
 export async function saveCustomLogo(dataUrl: string, uploadedBy: string = "developer"): Promise<void> {
   broadcastLogoChange(dataUrl);
+
+  // Sync with server PWA icon handler for disk persistence
+  try {
+    fetch("/api/pwa/update-icons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ logoDataUrl: dataUrl })
+    }).catch(() => {});
+  } catch (e) {}
+
   try {
     const docRef = doc(db, "system_settings", "branding");
     await setDoc(docRef, {
