@@ -151,7 +151,7 @@ export default function SecurityGuardPortal({
 
   const handleCopyPublicLink = () => {
     const origin = window.location.origin;
-    const publicUrl = `${origin}/security`;
+    const publicUrl = `${origin}/?view=security`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(publicUrl);
       setCopiedLink(true);

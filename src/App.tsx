@@ -300,7 +300,7 @@ export default function App() {
 
   const navigateToSecurityPortal = () => {
     if (typeof window !== "undefined" && window.history && window.history.pushState) {
-      window.history.pushState({}, "", "/security");
+      window.history.pushState({}, "", "/?view=security");
     }
     setIsSecurityPortalView(true);
   };
