@@ -163,7 +163,7 @@ async function setupServer() {
   if (process.env.NODE_ENV !== "production") {
     console.log("Setting up Vite Express server in development mode...");
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: "spa",
     });
     app.use(vite.middlewares);

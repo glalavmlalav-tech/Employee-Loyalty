@@ -829,35 +829,37 @@ export default function App() {
   };
 
   const addLeaveRequestInFirestore = async (leaveData: Omit<LeaveRequest, "id">) => {
-    // Strip any undefined keys to guarantee clean payload
-    const sanitizedData: Record<string, any> = {};
+    // Generate guaranteed unique permanent Firestore document reference
+    const newDocRef = doc(collection(db, "leave_requests"));
+    const leaveId = newDocRef.id;
+
+    // Strip any undefined or null keys to ensure pristine payload
+    const sanitizedData: Record<string, any> = {
+      id: leaveId,
+    };
     Object.entries(leaveData).forEach(([k, v]) => {
-      if (v !== undefined) {
+      if (v !== undefined && v !== null) {
         sanitizedData[k] = v;
       }
     });
 
-    const tempId = `leave-${Date.now()}`;
-    const newLeave: LeaveRequest = {
-      ...(sanitizedData as Omit<LeaveRequest, "id">),
-      id: tempId
-    };
+    const newLeave: LeaveRequest = sanitizedData as LeaveRequest;
+
     try {
-      // Optimistic update
+      // Optimistic update using the exact permanent Firestore document ID
       setLeaveRequests((prev) => {
-        const updated = [newLeave, ...prev.filter(l => l.id !== tempId)];
+        const updated = [newLeave, ...prev.filter(l => l.id !== leaveId)];
         safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
         return updated;
       });
-      const docRef = await addDoc(collection(db, "leave_requests"), sanitizedData);
-      setLeaveRequests((prev) => {
-        const updated = prev.map((l) => l.id === tempId ? { ...l, id: docRef.id } : l);
-        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
-        return updated;
-      });
+
+      // Persist directly to Firestore
+      await setDoc(newDocRef, sanitizedData);
+      console.log("Leave request permanently saved to Firestore with ID:", leaveId);
     } catch (e) {
-      console.error("Error adding leave request to Firestore:", e);
-      handleFirestoreError(e, OperationType.CREATE, "leave_requests");
+      console.error("Error writing leave request to Firestore:", e);
+      handleFirestoreError(e, OperationType.CREATE, `leave_requests/${leaveId}`);
+      throw e;
     }
   };
 
@@ -869,9 +871,7 @@ export default function App() {
         safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
         return updated;
       });
-      if (!id.startsWith("leave-")) {
-        await deleteDoc(doc(db, "leave_requests", id));
-      }
+      await deleteDoc(doc(db, "leave_requests", id));
     } catch (e) {
       console.warn("Error deleting leave request from Firestore:", e);
       handleFirestoreError(e, OperationType.DELETE, `leave_requests/${id}`);

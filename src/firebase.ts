@@ -1,23 +1,25 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { initializeFirestore, enableIndexedDbPersistence, disableNetwork, enableNetwork } from "firebase/firestore";
+import { 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager,
+  disableNetwork, 
+  enableNetwork 
+} from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
-// Initialize Services with ignoreUndefinedProperties to prevent crashes on optional form fields
+// Initialize Services with ignoreUndefinedProperties & modern multi-tab persistent disk cache
 export const db = initializeFirestore(app, {
-  ignoreUndefinedProperties: true
+  ignoreUndefinedProperties: true,
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
 }, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
-
-// Enable Firestore persistent disk cache for robust offline continuity
-if (typeof window !== "undefined") {
-  enableIndexedDbPersistence(db).catch((err) => {
-    console.warn("Firestore persistence setup warning: ", err.message);
-  });
-}
 
 export async function reconnectFirestoreNetwork(): Promise<void> {
   try {
