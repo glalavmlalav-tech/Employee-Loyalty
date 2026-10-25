@@ -17,11 +17,16 @@ import {
   AlertCircle,
   RefreshCw,
   Sparkles,
-  Clock
+  Clock,
+  Upload,
+  Image as ImageIcon,
+  RotateCcw
 } from "lucide-react";
 import { AppUser, BusinessId, BUSINESSES, Employee } from "../types";
 import { compressImageBase64, needsCompression } from "../utils/imageCompression";
 import { getNewDaysLimit, setNewDaysLimit } from "../utils";
+import AppLogo from "./AppLogo";
+import { useCustomLogo, saveCustomLogo, resetCustomLogo, compressLogoImage } from "../utils/logoManager";
 
 interface SettingsPanelProps {
   appUsers: AppUser[];
@@ -52,6 +57,76 @@ export default function SettingsPanel({
   const [totalToProcess, setTotalToProcess] = useState(0);
   const [currentEmpName, setCurrentEmpName] = useState("");
   const [optimizedBytesSaved, setOptimizedBytesSaved] = useState(0);
+
+  // Logo customization state
+  const customLogo = useCustomLogo();
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [logoSuccessMsg, setLogoSuccessMsg] = useState<string | null>(null);
+  const [logoErrorMsg, setLogoErrorMsg] = useState<string | null>(null);
+
+  const handleLogoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploadingLogo(true);
+      setLogoSuccessMsg(null);
+      setLogoErrorMsg(null);
+
+      // Compress and preserve transparency
+      const compressedLogo = await compressLogoImage(file, 300);
+      await saveCustomLogo(compressedLogo, currentUserEmail || "developer");
+
+      setLogoSuccessMsg(
+        language === "ku" 
+          ? "لۆگۆی فەرمی بە سەرکەوتوویی بارکرا و لە سەرجەم بەشەکان و تابی وێبگەردا جێبەجێکرا!" 
+          : "Brand logo successfully uploaded and applied across all views and tab favicon!"
+      );
+      setTimeout(() => setLogoSuccessMsg(null), 4000);
+    } catch (err: any) {
+      console.error("Failed to upload custom logo:", err);
+      setLogoErrorMsg(
+        language === "ku" 
+          ? "کێشەیەک ڕوویدا لە بارکردنی لۆگۆدا، تکایە دووبارە هەوڵبدەرەوە." 
+          : "Failed to upload logo, please try again."
+      );
+      setTimeout(() => setLogoErrorMsg(null), 4000);
+    } finally {
+      setIsUploadingLogo(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleResetLogo = async () => {
+    const confirmPrompt = language === "ku" 
+      ? "ئایا دڵنیایت لە گەڕانەوە بۆ لۆگۆی بنەڕەتی سیستەم؟" 
+      : "Are you sure you want to reset to the default system logo?";
+    if (!window.confirm(confirmPrompt)) return;
+
+    try {
+      setIsUploadingLogo(true);
+      setLogoSuccessMsg(null);
+      setLogoErrorMsg(null);
+
+      await resetCustomLogo();
+
+      setLogoSuccessMsg(
+        language === "ku" 
+          ? "لۆگۆ بە سەرکەوتوویی گەڕێنرایەوە بۆ لۆگۆی بنەڕەتی." 
+          : "Logo successfully reset to default."
+      );
+      setTimeout(() => setLogoSuccessMsg(null), 3000);
+    } catch (err) {
+      console.error("Failed to reset logo:", err);
+      setLogoErrorMsg(
+        language === "ku" 
+          ? "کێشەیەک ڕوویدا لە گەڕانەوەی لۆگۆدا." 
+          : "Failed to reset logo."
+      );
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
 
   // New badge duration settings state
   const [newDaysLimit, setNewDaysLimitState] = useState<number>(() => getNewDaysLimit());
@@ -513,6 +588,146 @@ export default function SettingsPanel({
               <span>{uncompressedEmployees.length}</span>
               {uncompressedEmployees.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping inline-block" />}
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Brand & App Logo Customization for Developer / Super Admin */}
+      <div className="glass-panel rounded-[36px] p-6 lg:p-8 space-y-6 relative overflow-hidden border border-white/80 shadow-sm animate-fade-in text-right font-sans">
+        <div className="flex flex-col lg:flex-row items-start justify-between gap-6 pb-6 border-b border-slate-100">
+          <div className="space-y-2 max-w-2xl">
+            <span className="text-[10px] bg-teal-500/10 text-teal-800 font-extrabold px-3 py-1.5 rounded-full border border-teal-500/20 uppercase tracking-wider inline-flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+              {language === "ku" ? "تایبەت بە گەشەپێدەر / بەڕێوەبەری سەرەکی" : "Developer & Super Admin"}
+            </span>
+            <h3 className="text-xl md:text-2xl font-display font-black text-slate-800 flex items-center gap-2">
+              <ImageIcon className="w-6 h-6 text-teal-600" />
+              <span>{language === "ku" ? "لۆگۆی فەرمی سیستەم و براندینگ" : "Official System Brand Logo"}</span>
+            </h3>
+            <p className="text-slate-500 text-xs md:text-sm leading-relaxed">
+              {language === "ku" 
+                ? "ئەپڵۆدکردنی لۆگۆی نوێ بۆ گۆڕینی سەرجەم لۆگۆکانی ناو سیستەم، لەوانە: سایدبار، پەڕەی چوونەژوورەوە، فۆڕمی فەرمی مۆڵەت، پۆرتاڵی دەروازە، و لۆگۆی تابی وێبگەر (Favicon)."
+                : "Upload a custom brand logo to replace all system logos including: sidebar, login portal, leave forms, guard portal, and the browser tab favicon."}
+            </p>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Upload Button */}
+            <label className="px-5 py-3 bg-teal-600 hover:bg-teal-700 text-white text-xs font-black rounded-2xl flex items-center gap-2 shadow-lg shadow-teal-600/15 hover:scale-102 transition duration-200 cursor-pointer">
+              <Upload className="w-4 h-4" />
+              <span>{isUploadingLogo ? (language === "ku" ? "باردەکرێت..." : "Uploading...") : (language === "ku" ? "ئەپڵۆدکردنی لۆگۆ" : "Upload Logo")}</span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                disabled={isUploadingLogo}
+                className="hidden"
+                onChange={handleLogoFileUpload}
+              />
+            </label>
+
+            {/* Reset to Default */}
+            {customLogo && (
+              <button
+                type="button"
+                onClick={handleResetLogo}
+                disabled={isUploadingLogo}
+                className="px-4 py-3 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold rounded-2xl flex items-center gap-2 transition cursor-pointer"
+                title={language === "ku" ? "گەڕانەوە بۆ لۆگۆی بنەڕەتی کۆمپانیا" : "Reset to default logo"}
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>{language === "ku" ? "گەڕانەوە بۆ بنەڕەتی" : "Reset to Default"}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Status Messages */}
+        {logoSuccessMsg && (
+          <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fade-in shadow-xs">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{logoSuccessMsg}</span>
+          </div>
+        )}
+
+        {logoErrorMsg && (
+          <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fade-in shadow-xs">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>{logoErrorMsg}</span>
+          </div>
+        )}
+
+        {/* 3 Real-time Previews showing where the logo appears */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-black text-slate-700 uppercase tracking-wider">
+              {language === "ku" ? "شێوازی دەرکەوتنی لۆگۆ لە بەشە جیاوازەکاندا (پێشبینینی ڕاستەوخۆ):" : "Live Previews across system components:"}
+            </h4>
+            <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-200/60">
+              {customLogo ? (language === "ku" ? "لۆگۆی گەشەپێدەر چالاکە ✓" : "Custom Logo Active ✓") : (language === "ku" ? "لۆگۆی بنەڕەتی چالاکە" : "Default Logo Active")}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Preview 1: Dark Sidebar (matching user's screenshot image_692f8035.png) */}
+            <div className="bg-slate-900 rounded-3xl p-4 border border-slate-800 shadow-md flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-2">
+                <span className="text-[10px] font-bold text-slate-400">
+                  {language === "ku" ? "١. سایدباری سەرەکی (تاریک)" : "1. Main Sidebar (Dark)"}
+                </span>
+                <span className="text-[9px] font-mono bg-slate-800 text-amber-400 px-2 py-0.5 rounded-full">Sidebar Header</span>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-slate-950/80 rounded-2xl border border-white/5">
+                <div className="p-2 bg-white/10 backdrop-blur-md rounded-2xl border border-white/5 flex-shrink-0 w-12 h-12 flex items-center justify-center overflow-hidden">
+                  <AppLogo className="w-8 h-8" color="#f59e0b" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-display font-black text-amber-400 leading-tight">
+                    {language === "ku" ? "ستاف" : "Staff"}
+                  </h1>
+                  <p className="text-[9px] text-slate-400 mt-0.5 font-medium">
+                    {language === "ku" ? "سیستەمی بەڕێوەبردن" : "Management Hub"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Preview 2: Official Leave Form Header (matching user's screenshot image_d9dc26fd.png) */}
+            <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                <span className="text-[10px] font-bold text-slate-500">
+                  {language === "ku" ? "٢. فۆڕمی فەرمی مۆڵەت (ڕووناک)" : "2. Leave Form Pass (Light)"}
+                </span>
+                <span className="text-[9px] font-mono bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full">Document Pass</span>
+              </div>
+              <div className="flex items-center justify-center p-3 bg-slate-50/70 rounded-2xl border border-slate-150">
+                <div className="flex flex-col items-center justify-center p-1.5 border border-slate-300 rounded-xl bg-white w-20 h-20 shadow-xs overflow-hidden">
+                  <AppLogo className="w-12 h-12 max-w-full max-h-full" color="#0f766e" />
+                  {!customLogo && (
+                    <span className="text-[9px] font-black tracking-widest text-slate-500 uppercase mt-0.5">LENYA</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Preview 3: Browser Tab Favicon */}
+            <div className="bg-slate-100/80 rounded-3xl p-4 border border-slate-200 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
+                <span className="text-[10px] font-bold text-slate-600">
+                  {language === "ku" ? "٣. تابی وێبگەر (Browser Tab)" : "3. Browser Tab Favicon"}
+                </span>
+                <span className="text-[9px] font-mono bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">Tab Icon</span>
+              </div>
+              <div className="bg-slate-200/90 rounded-2xl p-2.5 border border-slate-300">
+                <div className="bg-white rounded-xl px-3 py-2 flex items-center gap-2 shadow-xs border border-slate-200/80 max-w-[200px]">
+                  <div className="w-4 h-4 flex items-center justify-center shrink-0 overflow-hidden">
+                    <AppLogo className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-800 truncate">ستاف</span>
+                  <span className="text-slate-400 text-[10px] ml-auto">✕</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

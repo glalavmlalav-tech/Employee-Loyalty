@@ -45,7 +45,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { db, auth, handleFirestoreError, OperationType, reconnectFirestoreNetwork } from "./firebase";
-import { Employee, LoyaltyActivity, GiftLog, AlertNotification, BusinessId, BUSINESSES, AppUser, SentMessageLog } from "./types";
+import { Employee, LoyaltyActivity, GiftLog, AlertNotification, BusinessId, BUSINESSES, AppUser, SentMessageLog, LeaveRequest } from "./types";
 import { getActiveAlerts } from "./utils";
 
 // Sub-components
@@ -58,6 +58,8 @@ import MonthlyPlanner from "./components/MonthlyPlanner";
 import MonthlyCelebrations from "./components/MonthlyCelebrations";
 import WhatsAppComposerModal from "./components/WhatsAppComposerModal";
 import TrashPanel from "./components/TrashPanel";
+import SecurityGuardPortal from "./components/SecurityGuardPortal";
+import { initLogoSync } from "./utils/logoManager";
 
 const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
   {
@@ -211,6 +213,17 @@ export default function App() {
     }
     return [];
   });
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(() => {
+    const cached = localStorage.getItem("cache_leave_requests");
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
   const [appUsers, setAppUsers] = useState<AppUser[]>(() => {
     const cached = localStorage.getItem("cache_app_users");
     if (cached) {
@@ -246,6 +259,57 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [dbLoading, setDbLoading] = useState(true);
   const [dbError, setDbError] = useState<any | null>(null);
+
+  // Security Guard Public Portal Route Detection
+  const checkIsSecurityRoute = () => {
+    if (typeof window === "undefined") return false;
+    const path = (window.location.pathname || "").toLowerCase();
+    const search = (window.location.search || "").toLowerCase();
+    const hash = (window.location.hash || "").toLowerCase();
+    return (
+      path === "/security" ||
+      path === "/guard" ||
+      path === "/gate" ||
+      path.startsWith("/security") ||
+      path.startsWith("/guard") ||
+      path.startsWith("/gate") ||
+      search.includes("view=security") ||
+      search.includes("view=guard") ||
+      search.includes("portal=security") ||
+      search.includes("portal=guard") ||
+      search.includes("security=true") ||
+      hash.includes("security") ||
+      hash.includes("guard")
+    );
+  };
+
+  const [isSecurityPortalView, setIsSecurityPortalView] = useState<boolean>(checkIsSecurityRoute);
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      setIsSecurityPortalView(checkIsSecurityRoute());
+    };
+    window.addEventListener("popstate", handleUrlChange);
+    window.addEventListener("hashchange", handleUrlChange);
+    return () => {
+      window.removeEventListener("popstate", handleUrlChange);
+      window.removeEventListener("hashchange", handleUrlChange);
+    };
+  }, []);
+
+  const navigateToSecurityPortal = () => {
+    if (typeof window !== "undefined" && window.history && window.history.pushState) {
+      window.history.pushState({}, "", "/security");
+    }
+    setIsSecurityPortalView(true);
+  };
+
+  const navigateToAdmin = () => {
+    if (typeof window !== "undefined" && window.history && window.history.pushState) {
+      window.history.pushState({}, "", "/");
+    }
+    setIsSecurityPortalView(false);
+  };
 
   // Active calculated Alerts
   const [alerts, setAlerts] = useState<AlertNotification[]>([]);
@@ -430,10 +494,26 @@ export default function App() {
     } catch (e) {
       console.warn("Could not fetch messages from Firestore:", e);
     }
+
+    try {
+      const leaveSnap = await getDocs(collection(db, "leave_requests"));
+      const leaveList: LeaveRequest[] = [];
+      leaveSnap.forEach((docSnap) => {
+        leaveList.push({ id: docSnap.id, ...docSnap.data() } as LeaveRequest);
+      });
+      if (leaveList.length > 0) {
+        const sorted = leaveList.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+        setLeaveRequests(sorted);
+        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(sorted));
+      }
+    } catch (e) {
+      console.warn("Could not fetch leave_requests from Firestore:", e);
+    }
   }, []);
 
-  // Initial load of app_users and secondary collections (runs once per session)
+  // Initial load of app_users, secondary collections, and real-time custom logo
   useEffect(() => {
+    initLogoSync();
     fetchAppUsers();
     if (!hasFetchedSecondaryRef.current) {
       hasFetchedSecondaryRef.current = true;
@@ -472,8 +552,26 @@ export default function App() {
       }
     );
 
+    // Real-time listener for leave requests (ensures security guard portal updates live without reload)
+    const unsubscribeLeaves = onSnapshot(
+      collection(db, "leave_requests"),
+      (snapshot) => {
+        const leaveList: LeaveRequest[] = [];
+        snapshot.forEach((docSnap) => {
+          leaveList.push({ id: docSnap.id, ...docSnap.data() } as LeaveRequest);
+        });
+        const sorted = leaveList.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+        setLeaveRequests(sorted);
+        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(sorted));
+      },
+      (error) => {
+        console.warn("Real-time leave_requests subscription notice:", error);
+      }
+    );
+
     return () => {
       unsubscribeEmployees();
+      unsubscribeLeaves();
       hasSubscribedEmployeesRef.current = false;
     };
   }, []);
@@ -720,6 +818,48 @@ export default function App() {
     }
   };
 
+  const addLeaveRequestInFirestore = async (leaveData: Omit<LeaveRequest, "id">) => {
+    const tempId = `leave-${Date.now()}`;
+    const newLeave: LeaveRequest = {
+      ...leaveData,
+      id: tempId
+    };
+    try {
+      // Optimistic update
+      setLeaveRequests((prev) => {
+        const updated = [newLeave, ...prev];
+        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
+        return updated;
+      });
+      const docRef = await addDoc(collection(db, "leave_requests"), leaveData);
+      setLeaveRequests((prev) => {
+        const updated = prev.map((l) => l.id === tempId ? { ...l, id: docRef.id } : l);
+        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
+        return updated;
+      });
+    } catch (e) {
+      console.warn("Error adding leave request to Firestore:", e);
+      handleFirestoreError(e, OperationType.CREATE, "leave_requests");
+    }
+  };
+
+  const deleteLeaveRequestFromFirestore = async (id: string) => {
+    try {
+      // Optimistic update
+      setLeaveRequests((prev) => {
+        const updated = prev.filter((l) => l.id !== id);
+        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
+        return updated;
+      });
+      if (!id.startsWith("leave-")) {
+        await deleteDoc(doc(db, "leave_requests", id));
+      }
+    } catch (e) {
+      console.warn("Error deleting leave request from Firestore:", e);
+      handleFirestoreError(e, OperationType.DELETE, `leave_requests/${id}`);
+    }
+  };
+
   // Export all local database cache data into a backup JSON file
   const handleExportBackup = () => {
     try {
@@ -728,6 +868,7 @@ export default function App() {
         activities,
         gifts: giftLogs,
         messages: messageLogs,
+        leaveRequests,
         appUsers,
         exportDate: new Date().toISOString(),
         version: "1.0"
@@ -1054,6 +1195,19 @@ export default function App() {
     );
   }
 
+  // Public Security Guard Portal (strictly for entrance security guards, no login required)
+  if (isSecurityPortalView) {
+    return (
+      <SecurityGuardPortal
+        leaveRequests={leaveRequests}
+        systemDate={systemDate}
+        onRefresh={handleManualSync}
+        onGoToLogin={navigateToAdmin}
+        language={language}
+      />
+    );
+  }
+
   // Not logged in UI
   if (!userSession && !sandboxGuest) {
     return (
@@ -1134,6 +1288,7 @@ export default function App() {
             language={language} 
             onLoginSuccess={handleGoogleLoginSuccess} 
             onLoginWithCredentials={handleCredentialsLogin}
+            onGoToSecurityPortal={navigateToSecurityPortal}
           />
 
           {/* Real-time sync hint banner */}
@@ -1298,6 +1453,28 @@ export default function App() {
               <span className="flex-1 text-xs md:text-sm">{language === "ku" ? "ڕێکخستنی ئەکاونتەکان ⚙️" : "Manage Accounts ⚙️"}</span>
             </button>
           )}
+
+          {/* Dedicated Security Guard Portal Entry */}
+          <div className="pt-2 border-t border-white/10 mt-3">
+            <button
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                navigateToSecurityPortal();
+              }}
+              className="w-full flex items-center gap-3 p-3 rounded-2xl bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 transition-all duration-200 text-start group cursor-pointer shadow-sm hover:scale-[1.01]"
+              title={language === "ku" ? "کردنەوەی پۆرتاڵی پاسەوان (بۆ دەروازەی کۆمپانیا)" : "Open Security Guard Portal"}
+            >
+              <ShieldCheck className="w-5 h-5 text-teal-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="block text-xs font-black text-teal-200">
+                  {language === "ku" ? "پۆرتاڵی پاسەوان (دەروازە)" : "Security Guard Portal"}
+                </span>
+                <span className="block text-[10px] text-teal-400/80 truncate">
+                  {language === "ku" ? "مۆڵەتەکانی ئەمڕۆ (بێ پاسۆرد)" : "Today's leaves (No login)"}
+                </span>
+              </div>
+            </button>
+          </div>
         </nav>
 
         {/* Sync Info Profile box in sidebar */}
@@ -1723,6 +1900,10 @@ export default function App() {
                     onDeleteEmployee={deleteEmployeeFromFirestore}
                     language={language}
                     systemDate={systemDate}
+                    leaveRequests={leaveRequests}
+                    onAddLeaveRequest={addLeaveRequestInFirestore}
+                    onDeleteLeaveRequest={deleteLeaveRequestFromFirestore}
+                    onNavigateToSecurityPortal={navigateToSecurityPortal}
                   />
                 )}
 

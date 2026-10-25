@@ -89,6 +89,38 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "username", "password", "name", "role", "business", "createdAt"]
+    },
+    "LeaveRequest": {
+      "title": "LeaveRequest",
+      "description": "Digital leave request form with auto-filled staff details and touchscreen digital signature.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "formNumber": { "type": "string" },
+        "date": { "type": "string" },
+        "employeeId": { "type": "string" },
+        "employeeName": { "type": "string" },
+        "employeeBusiness": { "type": "string" },
+        "employeeRole": { "type": "string" },
+        "employeePhone": { "type": "string" },
+        "leaveType": { "type": "string" },
+        "durationType": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "formNumber", "date", "employeeId", "employeeName", "leaveType", "durationType", "reason", "createdBy", "createdAt", "status"]
+    },
+    "SystemSettings": {
+      "title": "SystemSettings",
+      "description": "Global application branding and configuration settings",
+      "type": "object",
+      "properties": {
+        "logoUrl": { "type": "string", "description": "Base64 or URL of the custom app logo" },
+        "updatedAt": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      }
     }
   },
   "firestore": {
@@ -111,6 +143,14 @@
     "app_users/{username}": {
       "schema": "AppUser",
       "description": "User credential profiles"
+    },
+    "leave_requests/{leaveId}": {
+      "schema": "LeaveRequest",
+      "description": "Archived digital leave forms"
+    },
+    "system_settings/{settingId}": {
+      "schema": "SystemSettings",
+      "description": "System branding and global config"
     }
   }
 }

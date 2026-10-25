@@ -31,5 +31,15 @@ service cloud.firestore {
     match /app_users/{username} {
       allow read, write: if true;
     }
+
+    // Leave requests rules
+    match /leave_requests/{leaveId} {
+      allow read, write: if true;
+    }
+
+    // System settings & branding rules
+    match /system_settings/{settingId} {
+      allow read, write: if true;
+    }
   }
 }

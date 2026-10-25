@@ -195,3 +195,52 @@ export interface SentMessageLog {
   sentBy: string; // Username of sender
 }
 
+export type LeaveType = "annual" | "sick" | "unpaid" | "emergency" | "hourly" | "other";
+export type LeaveDurationType = "daily" | "hourly";
+
+export interface LeaveRequest {
+  id: string;
+  formNumber: string; // e.g. "LR-2026-0001"
+  date: string; // Request date YYYY-MM-DD
+  employeeId: string;
+  employeeName: string;
+  employeeBusiness: BusinessId;
+  employeeRole: string;
+  employeePhone: string;
+  employeeHireDate?: string;
+  employeePhotoUrl?: string;
+
+  leaveType: LeaveType;
+  leaveTypeOtherText?: string;
+  hasMedicalReport?: boolean; // if sick leave
+
+  durationType: LeaveDurationType;
+
+  // Daily leave fields
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string; // YYYY-MM-DD
+  totalDays?: number;
+  returnDate?: string; // YYYY-MM-DD
+
+  // Hourly leave fields
+  hourlyDate?: string; // YYYY-MM-DD
+  startHour?: string; // HH:mm
+  endHour?: string; // HH:mm
+  totalHours?: number;
+
+  // Reason & Contact
+  reason: string;
+  deputizedEmployee?: string; // Employee who covers duties
+  contactPhone: string; // Contact phone while on leave
+
+  // Notes & Signature
+  notes?: string;
+  signatureDataUrl?: string; // Base64 data URL of digital signature (stylus/finger)
+
+  // System & Authorization
+  createdBy: string; // Username of manager / admin
+  createdByName?: string;
+  createdAt: string; // ISO string
+  status: "approved" | "cancelled";
+}
+

@@ -23,12 +23,13 @@ import {
   User,
   RefreshCw,
   Shield,
+  ShieldCheck,
   Clock,
   Printer,
   AlertTriangle,
   FileText
 } from "lucide-react";
-import { Employee, BusinessId, BUSINESSES, MaritalStatus, EmployeeStatus } from "../types";
+import { Employee, BusinessId, BUSINESSES, MaritalStatus, EmployeeStatus, LeaveRequest } from "../types";
 import { 
   formatDateToDDMMYYYY, 
   isNewEmployee, 
@@ -38,6 +39,8 @@ import {
 } from "../utils";
 import ImageCropper from "./ImageCropper";
 import { compressImageBase64 } from "../utils/imageCompression";
+import LeaveRequestModal from "./LeaveRequestModal";
+import EmployeeLeaveArchiveModal from "./EmployeeLeaveArchiveModal";
 
 interface ExportField {
   id: string;
@@ -177,6 +180,10 @@ interface EmployeeDirectoryProps {
   language: "ku" | "en";
   userSession?: { username: string; role: "super_admin" | "admin" | "observer"; business: BusinessId | "all"; name: string } | null;
   systemDate?: string;
+  leaveRequests?: LeaveRequest[];
+  onAddLeaveRequest?: (request: Omit<LeaveRequest, "id">) => Promise<void>;
+  onDeleteLeaveRequest?: (id: string) => Promise<void>;
+  onNavigateToSecurityPortal?: () => void;
 }
 
 export default function EmployeeDirectory({
@@ -186,7 +193,11 @@ export default function EmployeeDirectory({
   onDeleteEmployee,
   language,
   userSession,
-  systemDate = "2026-05-25"
+  systemDate = "2026-05-25",
+  leaveRequests = [],
+  onAddLeaveRequest,
+  onDeleteLeaveRequest,
+  onNavigateToSecurityPortal
 }: EmployeeDirectoryProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const isSuperAdmin = userSession?.role === "super_admin";
@@ -202,6 +213,10 @@ export default function EmployeeDirectory({
   };
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+
+  // Leave modals state
+  const [selectedLeaveEmployee, setSelectedLeaveEmployee] = useState<Employee | null>(null);
+  const [selectedArchiveEmployee, setSelectedArchiveEmployee] = useState<Employee | null>(null);
 
   // Excel Selection and Export State
   const [selectedEmpIds, setSelectedEmpIds] = useState<string[]>([]);
@@ -1343,6 +1358,17 @@ export default function EmployeeDirectory({
             </button>
           )}
 
+          {onNavigateToSecurityPortal && (
+            <button
+              onClick={onNavigateToSecurityPortal}
+              className="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md hover:scale-102 transition duration-200 cursor-pointer"
+              title={language === "ku" ? "پۆرتاڵی پاسەوان و دەروازە (مۆڵەتەکانی ئەمڕۆ بە بێ پاسۆرد)" : "Open Security Guard Portal"}
+            >
+              <ShieldCheck className="w-4 h-4 text-teal-200" />
+              <span>{language === "ku" ? "پۆرتاڵی پاسەوان" : "Guard Portal"}</span>
+            </button>
+          )}
+
           {userSession?.role !== "observer" && (
             <button
               onClick={handleOpenAdd}
@@ -1746,6 +1772,47 @@ export default function EmployeeDirectory({
                       </div>
                     </div>
                   )}
+                  {/* Leave Request & Archive Action Row */}
+                  <div className="p-2.5 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-teal-700 shrink-0" />
+                      <span className="text-xs font-black text-teal-950">
+                        {language === "ku" ? "مۆڵەت" : "Leave"}
+                      </span>
+                      {(() => {
+                        const count = leaveRequests.filter(l => l.employeeId === emp.id).length;
+                        if (count === 0) return null;
+                        return (
+                          <span className="px-1.5 py-0.2 rounded-full bg-teal-700 text-white font-mono font-black text-[10px]" title={language === "ku" ? `${count} مۆڵەت تۆمارکراوە` : `${count} leaves`}>
+                            {count}
+                          </span>
+                        );
+                      })()}
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedLeaveEmployee(emp)}
+                        className="px-2.5 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-black flex items-center gap-1 transition active:scale-95 shadow-xs cursor-pointer"
+                        title={language === "ku" ? "پڕکردنەوەی فۆڕمی مۆڵەت بۆ ئەم کارمەندە" : "Request Leave"}
+                      >
+                        <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                        <span>{language === "ku" ? "داواکاری مۆڵەت" : "Leave Request"}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedArchiveEmployee(emp)}
+                        className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/90 rounded-xl text-xs font-bold flex items-center gap-1 transition active:scale-95 cursor-pointer shadow-xs"
+                        title={language === "ku" ? "بینینی ئەرشیفی مۆڵەتەکانی ئەم کارمەندە" : "View Leave History"}
+                      >
+                        <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>{language === "ku" ? "ئەرشیف" : "Archive"}</span>
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="flex gap-2 justify-between items-center flex-wrap">
                     <div>
                       {isSuperAdmin && emp.createdBy && (
@@ -3066,6 +3133,43 @@ export default function EmployeeDirectory({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Digital Leave Request Modal */}
+      {selectedLeaveEmployee && (
+        <LeaveRequestModal
+          employee={selectedLeaveEmployee}
+          colleagues={employees}
+          systemDate={systemDate}
+          userSession={userSession}
+          onSubmit={async (req) => {
+            if (onAddLeaveRequest) {
+              await onAddLeaveRequest(req);
+            }
+            setSelectedLeaveEmployee(null);
+          }}
+          onClose={() => setSelectedLeaveEmployee(null)}
+          language={language}
+        />
+      )}
+
+      {/* Employee Leave Archive Modal */}
+      {selectedArchiveEmployee && (
+        <EmployeeLeaveArchiveModal
+          employee={selectedArchiveEmployee}
+          leaveRequests={leaveRequests || []}
+          onOpenNewLeaveModal={(emp) => {
+            setSelectedArchiveEmployee(null);
+            setSelectedLeaveEmployee(emp);
+          }}
+          onDeleteLeaveRequest={async (id) => {
+            if (onDeleteLeaveRequest) {
+              await onDeleteLeaveRequest(id);
+            }
+          }}
+          onClose={() => setSelectedArchiveEmployee(null)}
+          language={language}
+        />
       )}
 
     </div>

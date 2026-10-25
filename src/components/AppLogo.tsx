@@ -1,11 +1,34 @@
 import React from "react";
+import { useCustomLogo } from "../utils/logoManager";
 
 interface AppLogoProps {
   className?: string;
   color?: string;
+  customLogoUrl?: string | null;
+  forceDefault?: boolean;
 }
 
-export default function AppLogo({ className = "w-12 h-12", color = "#330a1c" }: AppLogoProps) {
+export default function AppLogo({ 
+  className = "w-12 h-12", 
+  color = "#330a1c",
+  customLogoUrl,
+  forceDefault = false
+}: AppLogoProps) {
+  const globalCustomLogo = useCustomLogo();
+  const effectiveLogo = forceDefault 
+    ? null 
+    : (customLogoUrl !== undefined ? customLogoUrl : globalCustomLogo);
+
+  if (effectiveLogo) {
+    return (
+      <img 
+        src={effectiveLogo} 
+        alt="Brand Logo" 
+        className={`${className} object-contain`} 
+      />
+    );
+  }
+
   return (
     <svg 
       className={className} 

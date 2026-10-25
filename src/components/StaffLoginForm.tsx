@@ -1,15 +1,21 @@
 import React, { useState } from "react";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth } from "../firebase";
-import { ShieldAlert, LogIn, Key, User } from "lucide-react";
+import { ShieldAlert, LogIn, Key, User, ShieldCheck } from "lucide-react";
 
 interface StaffLoginFormProps {
   language: "ku" | "en";
   onLoginSuccess: (email: string) => Promise<boolean>;
   onLoginWithCredentials: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  onGoToSecurityPortal?: () => void;
 }
 
-export default function StaffLoginForm({ language, onLoginSuccess, onLoginWithCredentials }: StaffLoginFormProps) {
+export default function StaffLoginForm({ 
+  language, 
+  onLoginSuccess, 
+  onLoginWithCredentials,
+  onGoToSecurityPortal
+}: StaffLoginFormProps) {
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   
@@ -210,6 +216,23 @@ export default function StaffLoginForm({ language, onLoginSuccess, onLoginWithCr
             : "You can use your dedicated username & password to instantly sign in across any browser or device."}
         </p>
       </div>
+
+      {onGoToSecurityPortal && (
+        <div className="pt-2 border-t border-slate-200/60">
+          <button
+            type="button"
+            onClick={onGoToSecurityPortal}
+            className="w-full py-3.5 px-4 bg-teal-500/15 hover:bg-teal-500/25 text-teal-900 border border-teal-500/30 text-xs font-black rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer shadow-sm active:scale-[0.98]"
+          >
+            <ShieldCheck className="w-4 h-4 text-teal-600" />
+            <span>
+              {language === "ku" 
+                ? "🛡️ پۆرتاڵی پاسەوان و دەروازە (مۆڵەتەکانی ئەمڕۆ)" 
+                : "🛡️ Company Gate & Guard Portal (Today's Leaves)"}
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
