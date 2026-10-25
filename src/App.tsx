@@ -829,26 +829,34 @@ export default function App() {
   };
 
   const addLeaveRequestInFirestore = async (leaveData: Omit<LeaveRequest, "id">) => {
+    // Strip any undefined keys to guarantee clean payload
+    const sanitizedData: Record<string, any> = {};
+    Object.entries(leaveData).forEach(([k, v]) => {
+      if (v !== undefined) {
+        sanitizedData[k] = v;
+      }
+    });
+
     const tempId = `leave-${Date.now()}`;
     const newLeave: LeaveRequest = {
-      ...leaveData,
+      ...(sanitizedData as Omit<LeaveRequest, "id">),
       id: tempId
     };
     try {
       // Optimistic update
       setLeaveRequests((prev) => {
-        const updated = [newLeave, ...prev];
+        const updated = [newLeave, ...prev.filter(l => l.id !== tempId)];
         safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
         return updated;
       });
-      const docRef = await addDoc(collection(db, "leave_requests"), leaveData);
+      const docRef = await addDoc(collection(db, "leave_requests"), sanitizedData);
       setLeaveRequests((prev) => {
         const updated = prev.map((l) => l.id === tempId ? { ...l, id: docRef.id } : l);
         safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
         return updated;
       });
     } catch (e) {
-      console.warn("Error adding leave request to Firestore:", e);
+      console.error("Error adding leave request to Firestore:", e);
       handleFirestoreError(e, OperationType.CREATE, "leave_requests");
     }
   };

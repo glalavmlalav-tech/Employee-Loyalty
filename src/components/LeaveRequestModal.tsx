@@ -137,7 +137,7 @@ export default function LeaveRequestModal({
       setIsSubmitting(true);
       setErrorMessage(null);
 
-      const newLeave: Omit<LeaveRequest, "id"> = {
+      const newLeave: any = {
         formNumber,
         date: requestDate,
         employeeId: employee.id,
@@ -145,38 +145,39 @@ export default function LeaveRequestModal({
         employeeBusiness: employee.business,
         employeeRole: employee.role,
         employeePhone: employee.phone,
-        employeeHireDate: employee.hireDate,
         employeePhotoUrl: employee.photoUrl || "",
-
         leaveType,
-        leaveTypeOtherText: leaveType === "other" ? leaveTypeOtherText : undefined,
-        hasMedicalReport: leaveType === "sick" ? hasMedicalReport : false,
-
         durationType,
-
-        startDate: durationType === "daily" ? startDate : undefined,
-        endDate: durationType === "daily" ? endDate : undefined,
-        totalDays: durationType === "daily" ? totalDays : undefined,
-        returnDate: durationType === "daily" ? returnDate : undefined,
-
-        hourlyDate: durationType === "hourly" ? hourlyDate : undefined,
-        startHour: durationType === "hourly" ? startHour : undefined,
-        endHour: durationType === "hourly" ? endHour : undefined,
-        totalHours: durationType === "hourly" ? totalHours : undefined,
-
         reason: reason.trim(),
-        deputizedEmployee: deputizedEmployee.trim() || undefined,
         contactPhone: contactPhone.trim() || employee.phone,
-
-        notes: notes.trim() || undefined,
-        signatureDataUrl: signatureDataUrl || undefined,
-
         createdBy: userSession?.name || userSession?.username || "بەڕێوەبەری لق",
         createdAt: new Date().toISOString(),
-        status: "approved" // Instantly approved by branch manager
+        status: "approved"
       };
 
-      await onSubmit(newLeave);
+      if (employee.hireDate) newLeave.employeeHireDate = employee.hireDate;
+      if (leaveType === "other" && leaveTypeOtherText) newLeave.leaveTypeOtherText = leaveTypeOtherText;
+      if (leaveType === "sick" && hasMedicalReport) newLeave.hasMedicalReport = true;
+
+      if (durationType === "daily") {
+        newLeave.startDate = startDate;
+        newLeave.endDate = endDate;
+        newLeave.totalDays = totalDays;
+        newLeave.returnDate = returnDate;
+      } else {
+        newLeave.hourlyDate = hourlyDate;
+        newLeave.startDate = hourlyDate; // Set fallback range so date queries match
+        newLeave.endDate = hourlyDate;
+        newLeave.startHour = startHour;
+        newLeave.endHour = endHour;
+        newLeave.totalHours = totalHours;
+      }
+
+      if (deputizedEmployee && deputizedEmployee.trim()) newLeave.deputizedEmployee = deputizedEmployee.trim();
+      if (notes && notes.trim()) newLeave.notes = notes.trim();
+      if (signatureDataUrl) newLeave.signatureDataUrl = signatureDataUrl;
+
+      await onSubmit(newLeave as Omit<LeaveRequest, "id">);
       onClose();
     } catch (err: any) {
       console.error("Failed to submit leave request:", err);

@@ -1,14 +1,15 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore, enableIndexedDbPersistence, disableNetwork, enableNetwork } from "firebase/firestore";
+import { initializeFirestore, enableIndexedDbPersistence, disableNetwork, enableNetwork } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
 
-// Initialize Services and export. 
-// CRITICAL: The app will break without specifying the correct firestore database ID
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// Initialize Services with ignoreUndefinedProperties to prevent crashes on optional form fields
+export const db = initializeFirestore(app, {
+  ignoreUndefinedProperties: true
+}, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth();
 
 // Enable Firestore persistent disk cache for robust offline continuity

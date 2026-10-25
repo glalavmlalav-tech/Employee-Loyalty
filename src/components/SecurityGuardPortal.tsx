@@ -28,6 +28,8 @@ import { formatDateToDDMMYYYY } from "../utils";
 import AppLogo from "./AppLogo";
 import PrintableLeaveForm from "./PrintableLeaveForm";
 import PWAInstallButton from "./PWAInstallButton";
+import { collection, onSnapshot } from "firebase/firestore";
+import { db } from "../firebase";
 
 interface SecurityGuardPortalProps {
   leaveRequests: LeaveRequest[];
@@ -37,21 +39,36 @@ interface SecurityGuardPortalProps {
   language?: "ku" | "en";
 }
 
+const cleanDateStr = (val?: string) => {
+  if (!val) return "";
+  const s = String(val).trim();
+  if (s.includes("T")) return s.split("T")[0];
+  if (s.includes(" ")) return s.split(" ")[0];
+  return s;
+};
+
 /**
  * Checks whether a leave request is active on a given date (YYYY-MM-DD).
  * - Hourly: active if hourlyDate === targetDate (or fallback date === targetDate)
  * - Daily: active if targetDate is between startDate and endDate (inclusive)
  */
 export function isLeaveActiveOnDate(leave: LeaveRequest, targetDate: string): boolean {
+  if (!leave) return false;
   if (leave.status === "cancelled") return false;
 
+  const target = cleanDateStr(targetDate);
+  if (!target) return true;
+
   if (leave.durationType === "hourly") {
-    const leaveDate = leave.hourlyDate || leave.date;
-    return leaveDate === targetDate;
+    const leaveDate = cleanDateStr(leave.hourlyDate) || cleanDateStr(leave.startDate) || cleanDateStr(leave.date);
+    return leaveDate === target;
   } else {
-    const start = leave.startDate || leave.date;
-    const end = leave.endDate || leave.startDate || leave.date;
-    return targetDate >= start && targetDate <= end;
+    const start = cleanDateStr(leave.startDate) || cleanDateStr(leave.date);
+    const end = cleanDateStr(leave.endDate) || cleanDateStr(leave.startDate) || cleanDateStr(leave.date);
+    if (!start && !end) return false;
+    const s = start || end;
+    const e = end || start;
+    return target >= s && target <= e;
   }
 }
 
@@ -87,7 +104,43 @@ export default function SecurityGuardPortal({
     return () => clearInterval(timer);
   }, []);
 
-  // UI Filters
+  // Direct real-time listener for leave requests to guarantee 100% instant sync on any device
+  const [liveLeaves, setLiveLeaves] = useState<LeaveRequest[]>(leaveRequests || []);
+
+  useEffect(() => {
+    try {
+      const unsubscribe = onSnapshot(collection(db, "leave_requests"), (snapshot) => {
+        const list: LeaveRequest[] = [];
+        snapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() } as LeaveRequest);
+        });
+        const sorted = list.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+        setLiveLeaves(sorted);
+      }, (err) => {
+        console.warn("SecurityGuardPortal live sync notice:", err);
+      });
+      return () => unsubscribe();
+    } catch (e) {
+      console.warn("Could not attach SecurityGuardPortal listener:", e);
+    }
+  }, []);
+
+  // Update liveLeaves if prop leaveRequests arrives or updates
+  useEffect(() => {
+    if (leaveRequests && leaveRequests.length > 0 && liveLeaves.length === 0) {
+      setLiveLeaves(leaveRequests);
+    }
+  }, [leaveRequests]);
+
+  // Use live data if populated, otherwise fallback to props
+  const effectiveLeaves = useMemo(() => {
+    if (liveLeaves && liveLeaves.length > 0) return liveLeaves;
+    if (leaveRequests && leaveRequests.length > 0) return leaveRequests;
+    return [];
+  }, [liveLeaves, leaveRequests]);
+
+  // UI Filters: "today" (selected date) vs "all" (all leaves)
+  const [viewScope, setViewScope] = useState<"today" | "all">("today");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBusiness, setSelectedBusiness] = useState<string>("all");
   const [selectedDurationType, setSelectedDurationType] = useState<"all" | "hourly" | "daily">("all");
@@ -97,14 +150,22 @@ export default function SecurityGuardPortal({
   // Selected leave to view full detailed form
   const [inspectingLeave, setInspectingLeave] = useState<LeaveRequest | null>(null);
 
-  // Filter leaves that are strictly active on the selected date
-  const todayLeaves = useMemo(() => {
-    return leaveRequests.filter((l) => isLeaveActiveOnDate(l, selectedDate));
-  }, [leaveRequests, selectedDate]);
+  // Filter leaves that are active on the selected date (or all if scope is "all")
+  const activeDateLeaves = useMemo(() => {
+    if (viewScope === "all") {
+      return effectiveLeaves.filter(l => l.status !== "cancelled");
+    }
+    return effectiveLeaves.filter((l) => isLeaveActiveOnDate(l, selectedDate));
+  }, [effectiveLeaves, selectedDate, viewScope]);
+
+  // Count leaves on other dates (to guide guard if a leave was recorded for another day)
+  const otherDatesLeaves = useMemo(() => {
+    return effectiveLeaves.filter(l => l.status !== "cancelled" && !isLeaveActiveOnDate(l, selectedDate));
+  }, [effectiveLeaves, selectedDate]);
 
   // Secondary search & branch filtering
   const filteredLeaves = useMemo(() => {
-    return todayLeaves.filter((leave) => {
+    return activeDateLeaves.filter((leave) => {
       // Branch filter
       if (selectedBusiness !== "all") {
         const empBiz = leave.employeeBusiness === "linia" ? "linia_karge" : leave.employeeBusiness;
@@ -120,11 +181,11 @@ export default function SecurityGuardPortal({
       // Search term
       if (searchTerm.trim()) {
         const q = searchTerm.toLowerCase().trim();
-        const matchesName = leave.employeeName.toLowerCase().includes(q);
-        const matchesRole = leave.employeeRole.toLowerCase().includes(q);
-        const matchesPhone = leave.employeePhone.includes(q) || leave.contactPhone.includes(q);
-        const matchesForm = leave.formNumber.toLowerCase().includes(q);
-        const matchesDeputized = leave.deputizedEmployee?.toLowerCase().includes(q);
+        const matchesName = (leave.employeeName || "").toLowerCase().includes(q);
+        const matchesRole = (leave.employeeRole || "").toLowerCase().includes(q);
+        const matchesPhone = (leave.employeePhone || "").includes(q) || (leave.contactPhone || "").includes(q);
+        const matchesForm = (leave.formNumber || "").toLowerCase().includes(q);
+        const matchesDeputized = (leave.deputizedEmployee || "").toLowerCase().includes(q);
         if (!matchesName && !matchesRole && !matchesPhone && !matchesForm && !matchesDeputized) {
           return false;
         }
@@ -132,12 +193,13 @@ export default function SecurityGuardPortal({
 
       return true;
     });
-  }, [todayLeaves, selectedBusiness, selectedDurationType, searchTerm]);
+  }, [activeDateLeaves, selectedBusiness, selectedDurationType, searchTerm]);
 
   // Summary counts
-  const totalTodayCount = todayLeaves.length;
-  const hourlyTodayCount = todayLeaves.filter((l) => l.durationType === "hourly").length;
-  const dailyTodayCount = todayLeaves.filter((l) => l.durationType === "daily").length;
+  const totalActiveDateCount = activeDateLeaves.length;
+  const hourlyActiveDateCount = activeDateLeaves.filter((l) => l.durationType === "hourly").length;
+  const dailyActiveDateCount = activeDateLeaves.filter((l) => l.durationType === "daily").length;
+  const totalAllLeavesCount = effectiveLeaves.filter(l => l.status !== "cancelled").length;
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -251,9 +313,50 @@ export default function SecurityGuardPortal({
         
         {/* Date Selector & Primary Metric Bar */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl relative overflow-hidden backdrop-blur-md">
+          {/* Top Bar: View Scope Switcher ("مۆڵەتەکانی ئەمڕۆ / بەروار" vs "هەموو مۆڵەتەکان") */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-5 pb-4 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-400">
+                {language === "ku" ? "پیشاندانی مۆڵەتەکان:" : "View Scope:"}
+              </span>
+              <div className="inline-flex p-1 bg-slate-800/90 rounded-2xl border border-slate-700/80 shadow-inner">
+                <button
+                  onClick={() => setViewScope("today")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    viewScope === "today"
+                      ? "bg-teal-500 text-slate-950 font-black shadow-md shadow-teal-500/20"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  {isToday 
+                    ? (language === "ku" ? `مۆڵەتەکانی ئەمڕۆ (${totalActiveDateCount})` : `Today's Passes (${totalActiveDateCount})`)
+                    : (language === "ku" ? `مۆڵەتەکانی بەروار (${totalActiveDateCount})` : `Selected Date (${totalActiveDateCount})`)}
+                </button>
+                <button
+                  onClick={() => setViewScope("all")}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    viewScope === "all"
+                      ? "bg-teal-500 text-slate-950 font-black shadow-md shadow-teal-500/20"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  {language === "ku" ? `هەموو مۆڵەتەکان (${totalAllLeavesCount})` : `All Passes (${totalAllLeavesCount})`}
+                </button>
+              </div>
+            </div>
+
+            {/* Live Indicator */}
+            <div className="flex items-center gap-2 text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span>{language === "ku" ? "ڕاستەوخۆ دەگات (Firestore Live Sync)" : "Firestore Live Connected"}</span>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
             
-            {/* Date Indicator & Switcher */}
+            {/* Date Indicator & Switcher (active when in today view, or can be used to filter) */}
             <div className="lg:col-span-5 flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-2xl p-2 px-3 shadow-inner">
                 <CalendarDays className="w-5 h-5 text-teal-400 shrink-0" />
@@ -264,7 +367,10 @@ export default function SecurityGuardPortal({
                   <input
                     type="date"
                     value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedDate(e.target.value);
+                      setViewScope("today");
+                    }}
                     className="bg-transparent text-sm font-mono font-black text-white focus:outline-none cursor-pointer"
                   />
                 </div>
@@ -273,7 +379,10 @@ export default function SecurityGuardPortal({
               {/* Reset to Today button if different date picked */}
               {!isToday && (
                 <button
-                  onClick={() => setSelectedDate(defaultDate)}
+                  onClick={() => {
+                    setSelectedDate(defaultDate);
+                    setViewScope("today");
+                  }}
                   className="px-3 py-1.5 bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-teal-300 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1"
                 >
                   <Clock className="w-3.5 h-3.5" />
@@ -281,30 +390,39 @@ export default function SecurityGuardPortal({
                 </button>
               )}
 
-              {isToday && (
+              {isToday && viewScope === "today" && (
                 <span className="px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-black rounded-xl inline-flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   {language === "ku" ? "مۆڵەتەکانی ئەمڕۆ" : "Today's Leaves"}
+                </span>
+              )}
+
+              {viewScope === "all" && (
+                <span className="px-3 py-1 bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-black rounded-xl inline-flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5" />
+                  {language === "ku" ? "پیشاندانی هەموو بەروارەکان" : "All Dates Active"}
                 </span>
               )}
             </div>
 
             {/* Quick Stat Badges */}
             <div className="lg:col-span-7 grid grid-cols-3 gap-2.5 sm:gap-4">
-              {/* Total Today */}
+              {/* Total Today / Selected */}
               <div className="bg-slate-800/80 border border-slate-700/60 rounded-2xl p-3 flex flex-col items-center justify-center text-center">
                 <span className="text-xl sm:text-2xl font-mono font-black text-white">
-                  {totalTodayCount}
+                  {viewScope === "all" ? totalAllLeavesCount : totalActiveDateCount}
                 </span>
                 <span className="text-[10px] sm:text-xs text-slate-400 font-bold mt-0.5">
-                  {language === "ku" ? "کۆی مۆڵەتەکانی ئەمڕۆ" : "Total Today"}
+                  {viewScope === "all" 
+                    ? (language === "ku" ? "کۆی هەموو مۆڵەتەکان" : "All Leaves") 
+                    : (language === "ku" ? "کۆی مۆڵەتەکانی بەروار" : "Total Active")}
                 </span>
               </div>
 
               {/* Hourly Leaves */}
               <div className="bg-teal-950/40 border border-teal-800/40 rounded-2xl p-3 flex flex-col items-center justify-center text-center">
                 <span className="text-xl sm:text-2xl font-mono font-black text-teal-300">
-                  {hourlyTodayCount}
+                  {hourlyActiveDateCount}
                 </span>
                 <span className="text-[10px] sm:text-xs text-teal-400 font-bold mt-0.5">
                   {language === "ku" ? "مۆڵەتی کاتژمێری" : "Hourly Leaves"}
@@ -314,7 +432,7 @@ export default function SecurityGuardPortal({
               {/* Daily Leaves */}
               <div className="bg-indigo-950/40 border border-indigo-800/40 rounded-2xl p-3 flex flex-col items-center justify-center text-center">
                 <span className="text-xl sm:text-2xl font-mono font-black text-indigo-300">
-                  {dailyTodayCount}
+                  {dailyActiveDateCount}
                 </span>
                 <span className="text-[10px] sm:text-xs text-indigo-400 font-bold mt-0.5">
                   {language === "ku" ? "مۆڵەتی ڕۆژانە" : "Daily Leaves"}
@@ -421,21 +539,47 @@ export default function SecurityGuardPortal({
 
         {/* Results List or Empty State */}
         {filteredLeaves.length === 0 ? (
-          <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-12 text-center flex flex-col items-center justify-center space-y-4">
+          <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-8 sm:p-12 text-center flex flex-col items-center justify-center space-y-4">
             <div className="w-16 h-16 rounded-3xl bg-slate-800/60 flex items-center justify-center border border-slate-700">
               <CheckCircle2 className="w-8 h-8 text-slate-500" />
             </div>
             <div>
               <h3 className="text-base font-black text-slate-200">
                 {language === "ku" 
-                  ? "هیچ مۆڵەتێک بۆ ئەم ڕۆژە نییە" 
-                  : "No active leave passes found for this date"}
+                  ? (viewScope === "all" ? "هیچ مۆڵەتێک لە سیستمدا تۆمار نەکراوە" : "هیچ مۆڵەتێک بۆ ئەم ڕۆژە نییە")
+                  : (viewScope === "all" ? "No leave passes recorded in the system" : "No active leave passes found for this date")}
               </h3>
               <p className="text-xs text-slate-400 max-w-md mx-auto mt-1 leading-relaxed">
                 {language === "ku"
-                  ? `لە بەرواری (${formatDateToDDMMYYYY(selectedDate)}) هیچ کارمەندێک مۆڵەتی کاتژمێری یان ڕۆژانەی نییە. لەگەڵ هەر تۆمارکردنێکی نوێ لەلایەن بەڕێوەبەرەوە، ڕاستەوخۆ لێرە دەردەکەوێت.`
-                  : "No employee has hourly or daily leave active on this date. As soon as a manager submits a leave pass, it will appear here in real time."}
+                  ? (viewScope === "all"
+                      ? "هەر مۆڵەتێک لەلایەن بەڕێوەبەرەوە تۆمار بکرێت، ڕاستەوخۆ لێرە دەردەکەوێت بەبێ پێویستی بە نوێکردنەوەی پەڕە."
+                      : `لە بەرواری (${formatDateToDDMMYYYY(selectedDate)}) هیچ کارمەندێک مۆڵەتی کاتژمێری یان ڕۆژانەی نییە. دەتوانیت بەروارەکە بگۆڕیت یان هەموو مۆڵەتەکان پیشان بدەیت.`)
+                  : "No employee has active leave. Any newly created leave request appears here in real time without refreshing."}
               </p>
+
+              {/* Guiding Alert: If leaves exist on other dates, offer 1-click switch */}
+              {otherDatesLeaves.length > 0 && viewScope === "today" && (
+                <div className="mt-5 p-4 bg-teal-500/10 border border-teal-500/30 rounded-2xl max-w-lg mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-start">
+                  <div className="text-xs text-teal-300 font-medium">
+                    <span className="font-bold text-white block mb-0.5">
+                      {language === "ku" 
+                        ? `💡 تێبینی: (${otherDatesLeaves.length}) مۆڵەت لە بەروارەکانی تردا هەیە` 
+                        : `💡 Notice: (${otherDatesLeaves.length}) passes exist on other dates`}
+                    </span>
+                    <span className="text-[11px] text-slate-300">
+                      {language === "ku"
+                        ? "ئەگەر مۆڵەتە تێستەکە لەسەر بەروارێکی تر تۆمار کراوە، دەتوانیت کرتە لێرە بکەیت:"
+                        : "If the test leave was recorded on another date, click below to see all:"}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setViewScope("all")}
+                    className="px-4 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs rounded-xl transition whitespace-nowrap cursor-pointer shadow-md shadow-teal-500/20 shrink-0"
+                  >
+                    {language === "ku" ? `پیشاندانی هەمووی (${totalAllLeavesCount})` : `Show All (${totalAllLeavesCount})`}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         ) : (
