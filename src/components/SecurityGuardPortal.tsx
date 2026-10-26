@@ -140,30 +140,11 @@ export default function SecurityGuardPortal({
     return () => clearInterval(timer);
   }, []);
 
-  // Direct real-time listener for leave requests to guarantee 100% instant sync on any device
+  // Sync leaves directly from props provided by App.tsx (backed by zero-read server cache)
   const [liveLeaves, setLiveLeaves] = useState<LeaveRequest[]>(leaveRequests || []);
 
   useEffect(() => {
-    try {
-      const unsubscribe = onSnapshot(collection(db, "leave_requests"), (snapshot) => {
-        const list: LeaveRequest[] = [];
-        snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() } as LeaveRequest);
-        });
-        const sorted = list.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
-        setLiveLeaves(sorted);
-      }, (err) => {
-        console.warn("SecurityGuardPortal live sync notice:", err);
-      });
-      return () => unsubscribe();
-    } catch (e) {
-      console.warn("Could not attach SecurityGuardPortal listener:", e);
-    }
-  }, []);
-
-  // Update liveLeaves if prop leaveRequests arrives or updates
-  useEffect(() => {
-    if (leaveRequests && leaveRequests.length > 0 && liveLeaves.length === 0) {
+    if (leaveRequests) {
       setLiveLeaves(leaveRequests);
     }
   }, [leaveRequests]);

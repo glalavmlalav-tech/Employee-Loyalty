@@ -12,6 +12,24 @@ const PORT = 3000;
 
 app.use(express.json({ limit: "15mb" }));
 
+import {
+  getAllData,
+  getDataVersion,
+  saveEmployee,
+  updateEmployee,
+  deleteEmployee,
+  saveLeaveRequest,
+  updateLeaveRequest,
+  deleteLeaveRequest,
+  saveAppUser,
+  saveActivity,
+  saveGift,
+  saveMessage,
+  saveSettings,
+  restoreStore,
+  pullFromFirestore
+} from "./api/dataStore.ts";
+
 // In-memory cache for developer uploaded custom PWA icons
 let inMemoryCustomIconBuffer: Buffer | null = null;
 
@@ -155,6 +173,162 @@ Output MUST conform to this exact JSON schema structure. No Markdown wrapping, p
       error: "شکست هێنا لە دروستکردنی چالاکی لە رێگەی ژیری دەستکرد",
       details: error instanceof Error ? error.message : String(error)
     });
+  }
+});
+
+// ==========================================
+// ZERO-READ PERSISTENT DATA ENDPOINTS
+// ==========================================
+
+// Bootstrap: Returns all data in 1 request from local server memory (0 Firestore reads)
+app.get("/api/data", (req, res) => {
+  try {
+    const data = getAllData();
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Lightweight version check for instant sync without reads
+app.get("/api/data/version", (req, res) => {
+  res.json({ version: getDataVersion() });
+});
+
+// Employee Endpoints
+app.post("/api/employees", (req, res) => {
+  try {
+    const emp = saveEmployee(req.body);
+    res.json(emp);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/employees/:id", (req, res) => {
+  try {
+    const emp = updateEmployee(req.params.id, req.body);
+    if (!emp) return res.status(404).json({ error: "Employee not found" });
+    res.json(emp);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/employees/:id", (req, res) => {
+  try {
+    deleteEmployee(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Leave Request Endpoints
+app.post("/api/leave-requests", (req, res) => {
+  try {
+    const leave = saveLeaveRequest(req.body);
+    res.json(leave);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/leave-requests/:id", (req, res) => {
+  try {
+    const leave = updateLeaveRequest(req.params.id, req.body);
+    if (!leave) return res.status(404).json({ error: "Leave request not found" });
+    res.json(leave);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/leave-requests/:id", (req, res) => {
+  try {
+    deleteLeaveRequest(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// App Users Endpoints
+app.post("/api/app-users", (req, res) => {
+  try {
+    const user = saveAppUser(req.body);
+    res.json(user);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Activities, Gifts, Messages, Settings
+app.post("/api/activities", (req, res) => {
+  try {
+    const act = saveActivity(req.body);
+    res.json(act);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/gifts", (req, res) => {
+  try {
+    const gift = saveGift(req.body);
+    res.json(gift);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/messages", (req, res) => {
+  try {
+    const msg = saveMessage(req.body);
+    res.json(msg);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/settings", (req, res) => {
+  try {
+    const s = saveSettings(req.body);
+    res.json(s);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Full Backup Download
+app.get("/api/backup/export", (req, res) => {
+  try {
+    const data = getAllData();
+    res.setHeader("Content-Disposition", "attachment; filename=lenya-hr-backup.json");
+    res.setHeader("Content-Type", "application/json");
+    res.send(JSON.stringify(data, null, 2));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Full Backup Restore
+app.post("/api/backup/restore", (req, res) => {
+  try {
+    const restored = restoreStore(req.body);
+    res.json({ success: true, count: restored.employees?.length || 0 });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Manual Sync Pull from Firestore
+app.post("/api/sync/pull-from-firestore", async (req, res) => {
+  try {
+    const result = await pullFromFirestore();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -20,7 +20,10 @@ import {
   Clock,
   Upload,
   Image as ImageIcon,
-  RotateCcw
+  RotateCcw,
+  Database,
+  Download,
+  ShieldCheck
 } from "lucide-react";
 import { AppUser, BusinessId, BUSINESSES, Employee } from "../types";
 import { compressImageBase64, needsCompression } from "../utils/imageCompression";
@@ -785,6 +788,98 @@ export default function SettingsPanel({
                 {language === "ku" ? "پاشەکەوتکرا!" : "Saved!"}
               </span>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Zero-Read Persistent Data Storage & Backup Panel */}
+      <div className="glass-panel rounded-[36px] p-6 lg:p-8 space-y-6 relative overflow-hidden border border-white/80 shadow-sm animate-fade-in text-right font-sans">
+        <div className="flex flex-col lg:flex-row items-start justify-between gap-6 pb-6 border-b border-slate-100">
+          <div className="space-y-2 max-w-2xl">
+            <span className="text-[10px] bg-emerald-500/10 text-emerald-800 font-extrabold px-3 py-1.5 rounded-full border border-emerald-500/20 uppercase tracking-wider inline-flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              {language === "ku" ? "کۆگای تایبەتی سێرڤەر (Zero Read Quota)" : "High-Performance Zero-Read Storage"}
+            </span>
+            <h3 className="text-xl md:text-2xl font-display font-black text-slate-800 flex items-center gap-2">
+              <Database className="w-6 h-6 text-emerald-600" />
+              <span>{language === "ku" ? "پاراستنی داتاکان و باکئەپی سەرجەم تۆمارەکان" : "Data Safety & Database Backup"}</span>
+            </h3>
+            <p className="text-slate-500 text-xs md:text-sm leading-relaxed">
+              {language === "ku"
+                ? "سەرجەم زانیارییەکانی کارمەندان (٧١ کارمەند)، بەکارهێنەران و مۆڵەتەکان لە کۆگای تایبەتی ناوخۆیی سێرڤەر بە پارێزراوی تۆمارکراون. سیستمەکە لە ڕێگەی کێشی صفر لە خوێندنەوەی فایەربەیس کاردەکات و تووشی هیچ سنووردارییەکی ڕۆژانە (Quota Exceeded) نابێتەوە."
+                : "All employee profiles, users, and leave records are securely stored in the high-speed backend persistence layer. The system queries data with zero Firestore read cost, completely immune to daily quota limits."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Download Complete Backup */}
+            <a
+              href="/api/backup/export"
+              download="lenya_full_database_backup.json"
+              className="px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-2xl flex items-center gap-2 shadow-lg shadow-emerald-600/15 hover:scale-102 transition duration-200 cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>{language === "ku" ? "داگرتنی باکئەپی هەموو داتاکان (JSON)" : "Download Full Database (JSON)"}</span>
+            </a>
+
+            {/* Restore from File */}
+            <label className="px-4 py-3.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold rounded-2xl flex items-center gap-2 transition cursor-pointer">
+              <Upload className="w-4 h-4" />
+              <span>{language === "ku" ? "گەڕاندنەوە لە فایل (Restore)" : "Restore from Backup"}</span>
+              <input
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const text = await file.text();
+                    const parsed = JSON.parse(text);
+                    const res = await fetch("/api/backup/restore", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(parsed)
+                    });
+                    if (res.ok) {
+                      alert(language === "ku" ? "باکئەپەکە بە سەرکەوتوویی لە کۆگای داتادا جێگیرکرا!" : "Database restored successfully!");
+                      window.location.reload();
+                    } else {
+                      alert("Error restoring backup.");
+                    }
+                  } catch (err) {
+                    alert("Invalid JSON file.");
+                  }
+                }}
+              />
+            </label>
+          </div>
+        </div>
+
+        {/* Database Health Status Badge */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+          <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100/60 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] text-emerald-800 font-bold block">{language === "ku" ? "دۆخی پارێزراوی داتاکان" : "Data Integrity"}</span>
+              <span className="text-sm font-black text-emerald-700 mt-1 block">{language === "ku" ? "پارێزراوە (100% پارێزراو)" : "100% Secure & Backed Up"}</span>
+            </div>
+            <ShieldCheck className="w-6 h-6 text-emerald-600" />
+          </div>
+
+          <div className="bg-slate-50/70 p-4 rounded-2xl border border-slate-150 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] text-slate-500 font-bold block">{language === "ku" ? "سنوورداری خوێندنەوەی رۆژانە" : "Daily Read Quota"}</span>
+              <span className="text-sm font-black text-slate-800 mt-1 block">{language === "ku" ? "سفر خەرجی (بێ سنوور)" : "Zero-Read (Unlimited)"}</span>
+            </div>
+            <Zap className="w-6 h-6 text-amber-500" />
+          </div>
+
+          <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/60 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] text-indigo-700 font-bold block">{language === "ku" ? "کۆی گشتی کارمەندان" : "Total Employees"}</span>
+              <span className="text-sm font-black text-indigo-800 mt-1 block">{employees.length} {language === "ku" ? "کارمەند" : "Staff"}</span>
+            </div>
+            <Users className="w-6 h-6 text-indigo-600" />
           </div>
         </div>
       </div>

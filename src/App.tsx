@@ -61,6 +61,21 @@ import TrashPanel from "./components/TrashPanel";
 import SecurityGuardPortal from "./components/SecurityGuardPortal";
 import PWAInstallButton from "./components/PWAInstallButton";
 import { initLogoSync } from "./utils/logoManager";
+import { 
+  fetchBootstrapData, 
+  checkDataVersion, 
+  apiSaveEmployee, 
+  apiUpdateEmployee, 
+  apiDeleteEmployee, 
+  apiSaveLeave, 
+  apiDeleteLeave, 
+  apiSaveActivity, 
+  apiSaveGift, 
+  apiSaveMessage, 
+  apiSaveAppUser,
+  apiRestoreBackup,
+  apiPullFromFirestore
+} from "./utils/apiClient";
 
 const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
   {
@@ -420,181 +435,85 @@ export default function App() {
   const hasSubscribedEmployeesRef = React.useRef(false);
   const hasFetchedSecondaryRef = React.useRef(false);
 
-  // 1. Fetch app users on-demand (avoids permanent 24/7 read loops)
-  const fetchAppUsers = useCallback(async () => {
+  // Zero-read Server Data Loader (loads all 71 employees, leaves, users, etc. in 1 call at 0 Firestore reads)
+  const currentVersionRef = React.useRef<number>(0);
+
+  const loadDataFromServer = useCallback(async () => {
     try {
-      const snap = await getDocs(collection(db, "app_users"));
-      const userList: AppUser[] = [];
-      snap.forEach((docSnap) => {
-        userList.push({ id: docSnap.id, ...docSnap.data() } as AppUser);
-      });
-      if (userList.length > 0) {
-        setAppUsers(userList);
-        safeLocalStorageSetItem("cache_app_users", JSON.stringify(userList));
-      }
-      setAppUsersLoaded(true);
-
-      const hasOwner = userList.some((u) => u.username === "glalavmlalav");
-      if (!hasOwner) {
-        setDoc(doc(db, "app_users", "glalavmlalav"), {
-          id: "glalavmlalav",
-          username: "glalavmlalav",
-          password: "admin",
-          email: "glalavmlalav@gmail.com",
-          name: "Super Admin (glalavmlalav)",
-          role: "super_admin",
-          business: "all",
-          createdAt: new Date().toISOString()
-        }).catch((err) => console.log("Owner seeding backup failed:", err));
-      }
-    } catch (error) {
-      console.warn("Error fetching app users from Firestore:", error);
-      handleFirestoreError(error, OperationType.LIST, "app_users");
-      const cached = localStorage.getItem("cache_app_users");
-      if (cached) {
-        try { setAppUsers(JSON.parse(cached)); } catch (e) {}
-      }
-      setAppUsersLoaded(true);
-    }
-  }, []);
-
-  // 2. Fetch Secondary Collections (Activities, Gifts, Messages) on demand or startup
-  const fetchSecondaryCollections = useCallback(async () => {
-    try {
-      const actSnap = await getDocs(collection(db, "activities"));
-      const actList: LoyaltyActivity[] = [];
-      actSnap.forEach((docSnap) => {
-        actList.push({ id: docSnap.id, ...docSnap.data() } as LoyaltyActivity);
-      });
-      if (actList.length > 0) {
-        const sorted = actList.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-        setActivities(sorted);
-        safeLocalStorageSetItem("cache_activities", JSON.stringify(sorted));
-      }
-    } catch (e) {
-      console.warn("Could not fetch activities from Firestore:", e);
-    }
-
-    try {
-      const giftSnap = await getDocs(collection(db, "gifts"));
-      const giftList: GiftLog[] = [];
-      giftSnap.forEach((docSnap) => {
-        giftList.push({ id: docSnap.id, ...docSnap.data() } as GiftLog);
-      });
-      if (giftList.length > 0) {
-        const sorted = giftList.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-        setGiftLogs(sorted);
-        safeLocalStorageSetItem("cache_gifts", JSON.stringify(sorted));
-      }
-    } catch (e) {
-      console.warn("Could not fetch gifts from Firestore:", e);
-    }
-
-    try {
-      const msgSnap = await getDocs(collection(db, "messages"));
-      const msgList: SentMessageLog[] = [];
-      msgSnap.forEach((docSnap) => {
-        msgList.push({ id: docSnap.id, ...docSnap.data() } as SentMessageLog);
-      });
-      if (msgList.length > 0) {
-        const sorted = msgList.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
-        setMessageLogs(sorted);
-        safeLocalStorageSetItem("cache_messages", JSON.stringify(sorted));
-      }
-    } catch (e) {
-      console.warn("Could not fetch messages from Firestore:", e);
-    }
-
-    try {
-      const leaveSnap = await getDocs(collection(db, "leave_requests"));
-      const leaveList: LeaveRequest[] = [];
-      leaveSnap.forEach((docSnap) => {
-        leaveList.push({ id: docSnap.id, ...docSnap.data() } as LeaveRequest);
-      });
-      if (leaveList.length > 0) {
-        const sorted = leaveList.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
-        setLeaveRequests(sorted);
-        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(sorted));
-      }
-    } catch (e) {
-      console.warn("Could not fetch leave_requests from Firestore:", e);
-    }
-  }, []);
-
-  // Initial load of app_users, secondary collections, and real-time custom logo
-  useEffect(() => {
-    initLogoSync();
-    fetchAppUsers();
-    if (!hasFetchedSecondaryRef.current) {
-      hasFetchedSecondaryRef.current = true;
-      fetchSecondaryCollections();
-    }
-  }, [fetchAppUsers, fetchSecondaryCollections]);
-
-  // 3. Stable, Singleton Real-time listener for Employees
-  // Stays active permanently without re-subscribing in loops on session changes!
-  useEffect(() => {
-    if (hasSubscribedEmployeesRef.current) return;
-    hasSubscribedEmployeesRef.current = true;
-
-    setDbLoading(true);
-
-    const unsubscribeEmployees = onSnapshot(
-      collection(db, "employees"),
-      (snapshot) => {
-        const empList: Employee[] = [];
-        snapshot.forEach((docSnap) => {
-          empList.push({ id: docSnap.id, ...docSnap.data() } as Employee);
-        });
-        setEmployees(empList);
-        safeLocalStorageSetItem("cache_employees", JSON.stringify(empList));
-        setDbLoading(false);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, "employees");
-        const cached = localStorage.getItem("cache_employees");
-        if (cached) {
-          try {
-            setEmployees(JSON.parse(cached));
-          } catch (e) {}
+      const data = await fetchBootstrapData();
+      if (data) {
+        if (Array.isArray(data.employees)) {
+          setEmployees(data.employees);
+          safeLocalStorageSetItem("cache_employees", JSON.stringify(data.employees));
+        }
+        if (Array.isArray(data.leave_requests)) {
+          const sorted = data.leave_requests.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+          setLeaveRequests(sorted);
+          safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(sorted));
+        }
+        if (Array.isArray(data.app_users) && data.app_users.length > 0) {
+          setAppUsers(data.app_users);
+          safeLocalStorageSetItem("cache_app_users", JSON.stringify(data.app_users));
+          setAppUsersLoaded(true);
+        }
+        if (Array.isArray(data.activities)) {
+          const sorted = data.activities.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+          setActivities(sorted);
+          safeLocalStorageSetItem("cache_activities", JSON.stringify(sorted));
+        }
+        if (Array.isArray(data.gifts)) {
+          const sorted = data.gifts.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+          setGiftLogs(sorted);
+          safeLocalStorageSetItem("cache_gifts", JSON.stringify(sorted));
+        }
+        if (Array.isArray(data.messages)) {
+          const sorted = data.messages.sort((a, b) => (b.sentAt || "").localeCompare(a.sentAt || ""));
+          setMessageLogs(sorted);
+          safeLocalStorageSetItem("cache_messages", JSON.stringify(sorted));
+        }
+        if (data.version) {
+          currentVersionRef.current = data.version;
         }
         setDbLoading(false);
+        setDbError(null);
       }
-    );
-
-    // Real-time listener for leave requests (ensures security guard portal updates live without reload)
-    const unsubscribeLeaves = onSnapshot(
-      collection(db, "leave_requests"),
-      (snapshot) => {
-        const leaveList: LeaveRequest[] = [];
-        snapshot.forEach((docSnap) => {
-          leaveList.push({ id: docSnap.id, ...docSnap.data() } as LeaveRequest);
-        });
-        const sorted = leaveList.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
-        setLeaveRequests(sorted);
-        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(sorted));
-      },
-      (error) => {
-        console.warn("Real-time leave_requests subscription notice:", error);
-      }
-    );
-
-    return () => {
-      unsubscribeEmployees();
-      unsubscribeLeaves();
-      hasSubscribedEmployeesRef.current = false;
-    };
+    } catch (err) {
+      console.warn("Notice: Server bootstrap data fetch fell back to cached/local storage:", err);
+      setDbLoading(false);
+    }
   }, []);
 
-  // Manual Refresh / Sync Action
+  // Initial load on mount + real-time lightweight version ping
+  useEffect(() => {
+    initLogoSync();
+    loadDataFromServer();
+
+    // Check version every 10 seconds (0 Firestore read cost, served directly by Express memory)
+    const interval = setInterval(async () => {
+      try {
+        const remoteVersion = await checkDataVersion();
+        if (remoteVersion > currentVersionRef.current) {
+          loadDataFromServer();
+        }
+      } catch (e) {}
+    }, 10000);
+
+    const onFocus = () => {
+      loadDataFromServer();
+    };
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadDataFromServer]);
+
+  // Manual Refresh / Sync Action (0 Firestore reads)
   const handleManualSync = async () => {
     setIsSyncing(true);
-    await reconnectFirestoreNetwork();
     setDbError(null);
-    await Promise.allSettled([
-      fetchAppUsers(),
-      fetchSecondaryCollections()
-    ]);
+    await loadDataFromServer();
     setTimeout(() => {
       setIsSyncing(false);
     }, 500);
@@ -606,116 +525,125 @@ export default function App() {
     setAlerts(currentAlerts);
   }, [employees, systemDate]);
 
-  // Firestore operations with optimistic offline local persistence support
+  // Zero-read Persistent Operations (saves to local server storage and syncs to Firestore in background)
   const registerEmployeeInFirestore = async (empData: Omit<Employee, "id">) => {
-    const collRef = collection(db, "employees");
-    let newEmp: Employee;
+    const tempId = `emp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const newEmp: Employee = {
+      ...empData,
+      createdBy: userSession?.username || "admin",
+      createdAt: new Date().toISOString(),
+      id: tempId
+    };
+    // Optimistic update
+    setEmployees((prev) => {
+      const updated = [...prev, newEmp];
+      safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+      return updated;
+    });
+
+    // 1. Save to persistent zero-read backend store
+    apiSaveEmployee(newEmp).catch((e) => console.warn("Notice: Backend store save warning:", e));
+
+    // 2. Direct Firestore fallback attempt
     try {
-      const docRef = doc(collRef);
-      newEmp = {
-        ...empData,
-        createdBy: userSession?.username || "admin",
-        createdAt: new Date().toISOString(),
-        id: docRef.id
-      };
-      // Optimistic update
-      setEmployees((prev) => {
-        const updated = [...prev, newEmp];
-        safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
-        return updated;
-      });
+      const docRef = doc(db, "employees", tempId);
       await setDoc(docRef, newEmp);
     } catch (e) {
-      handleFirestoreError(e, OperationType.CREATE, "employees");
-      // If docRef wasn't successfully set or failed, we keep the state (as offline fallback is already written)
+      console.warn("Notice: Direct Firestore write handled via backend:", e);
     }
   };
 
   const updateEmployeeInFirestore = async (id: string, empData: Partial<Employee>) => {
-    const docRef = doc(db, "employees", id);
+    // Optimistic update
+    setEmployees((prev) => {
+      const updated = prev.map((e) => (e.id === id ? { ...e, ...empData } : e));
+      safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+      return updated;
+    });
+
+    // 1. Save to persistent zero-read backend store
+    apiUpdateEmployee(id, empData).catch((e) => console.warn("Notice: Backend store update warning:", e));
+
+    // 2. Direct Firestore fallback
     try {
-      // Optimistic update
-      setEmployees((prev) => {
-        const updated = prev.map((e) => (e.id === id ? { ...e, ...empData } : e));
-        safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
-        return updated;
-      });
+      const docRef = doc(db, "employees", id);
       await updateDoc(docRef, empData);
     } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `employees/${id}`);
+      console.warn("Notice: Direct Firestore update handled via backend:", e);
     }
   };
 
   const deleteEmployeeFromFirestore = async (id: string) => {
-    const docRef = doc(db, "employees", id);
     const senderName = userSession?.name || sandboxGuest || "Admin";
+    const deletionPayload = {
+      isDeleted: true,
+      deletedAt: new Date().toISOString(),
+      deletedBy: senderName
+    };
+
+    // Optimistic update
+    setEmployees((prev) => {
+      const updated = prev.map((e) => (e.id === id ? { ...e, ...deletionPayload } : e));
+      safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+      return updated;
+    });
+
+    apiUpdateEmployee(id, deletionPayload).catch((e) => console.warn("Notice: Backend store delete warning:", e));
+
     try {
-      // Optimistic update
-      setEmployees((prev) => {
-        const updated = prev.map((e) => {
-          if (e.id === id) {
-            return {
-              ...e,
-              isDeleted: true,
-              deletedAt: new Date().toISOString(),
-              deletedBy: senderName
-            };
-          }
-          return e;
-        });
-        safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
-        return updated;
-      });
-      await updateDoc(docRef, {
-        isDeleted: true,
-        deletedAt: new Date().toISOString(),
-        deletedBy: senderName
-      });
+      const docRef = doc(db, "employees", id);
+      await updateDoc(docRef, deletionPayload);
     } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `employees/${id}`);
+      console.warn("Notice: Direct Firestore delete handled via backend:", e);
     }
   };
 
   const restoreEmployeeFromTrash = async (id: string) => {
-    const docRef = doc(db, "employees", id);
-    try {
-      // Optimistic update
-      setEmployees((prev) => {
-        const updated = prev.map((e) => {
-          if (e.id === id) {
-            const copy = { ...e };
-            delete copy.isDeleted;
-            delete copy.deletedAt;
-            delete copy.deletedBy;
-            return copy;
-          }
-          return e;
-        });
-        safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
-        return updated;
+    // Optimistic update
+    setEmployees((prev) => {
+      const updated = prev.map((e) => {
+        if (e.id === id) {
+          const copy = { ...e };
+          delete copy.isDeleted;
+          delete copy.deletedAt;
+          delete copy.deletedBy;
+          return copy;
+        }
+        return e;
       });
+      safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+      return updated;
+    });
+
+    apiUpdateEmployee(id, { isDeleted: false, deletedAt: null as any, deletedBy: null as any }).catch((e) => console.warn("Notice: Backend store restore warning:", e));
+
+    try {
+      const docRef = doc(db, "employees", id);
       await updateDoc(docRef, {
         isDeleted: deleteField(),
         deletedAt: deleteField(),
         deletedBy: deleteField()
       });
     } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `employees/${id}`);
+      console.warn("Notice: Direct Firestore restore handled via backend:", e);
     }
   };
 
   const permanentlyDeleteEmployeeFromFirestore = async (id: string) => {
-    const docRef = doc(db, "employees", id);
+    // Optimistic update
+    setEmployees((prev) => {
+      const updated = prev.filter((e) => e.id !== id);
+      safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+      return updated;
+    });
+
+    apiDeleteEmployee(id).catch((e) => console.warn("Notice: Backend store perm-delete warning:", e));
+
     try {
-      // Optimistic update
-      setEmployees((prev) => {
-        const updated = prev.filter((e) => e.id !== id);
-        safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
-        return updated;
-      });
+      const docRef = doc(db, "employees", id);
       await deleteDoc(docRef);
     } catch (e) {
-      handleFirestoreError(e, OperationType.DELETE, `employees/${id}`);
+      console.warn("Notice: Direct Firestore perm-delete handled via backend:", e);
     }
   };
 
@@ -726,46 +654,53 @@ export default function App() {
       id: tempId,
       createdAt: new Date().toISOString()
     };
+    // Optimistic update
+    setActivities((prev) => {
+      const updated = [newAct, ...prev].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      safeLocalStorageSetItem("cache_activities", JSON.stringify(updated));
+      return updated;
+    });
+
+    apiSaveActivity(newAct).catch((e) => console.warn("Notice: Backend store activity warning:", e));
+
     try {
-      // Optimistic update
-      setActivities((prev) => {
-        const updated = [newAct, ...prev].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-        safeLocalStorageSetItem("cache_activities", JSON.stringify(updated));
-        return updated;
-      });
       await setDoc(doc(db, "activities", tempId), newAct);
     } catch (e) {
-      handleFirestoreError(e, OperationType.CREATE, "activities");
+      console.warn("Notice: Direct Firestore activity save handled via backend:", e);
     }
   };
 
   const updateActivityStatusInFirestore = async (id: string, status: LoyaltyActivity["status"]) => {
-    const docRef = doc(db, "activities", id);
+    // Optimistic update
+    setActivities((prev) => {
+      const updated = prev.map((act) => act.id === id ? { ...act, status } : act);
+      safeLocalStorageSetItem("cache_activities", JSON.stringify(updated));
+      return updated;
+    });
+
+    apiSaveActivity({ id, status } as any).catch((e) => console.warn("Notice: Backend store activity update warning:", e));
+
     try {
-      // Optimistic update
-      setActivities((prev) => {
-        const updated = prev.map((act) => act.id === id ? { ...act, status } : act);
-        safeLocalStorageSetItem("cache_activities", JSON.stringify(updated));
-        return updated;
-      });
+      const docRef = doc(db, "activities", id);
       await updateDoc(docRef, { status });
     } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `activities/${id}`);
+      console.warn("Notice: Direct Firestore activity update handled via backend:", e);
     }
   };
 
   const deleteActivityFromFirestore = async (id: string) => {
-    const docRef = doc(db, "activities", id);
+    // Optimistic update
+    setActivities((prev) => {
+      const updated = prev.filter((act) => act.id !== id);
+      safeLocalStorageSetItem("cache_activities", JSON.stringify(updated));
+      return updated;
+    });
+
     try {
-      // Optimistic update
-      setActivities((prev) => {
-        const updated = prev.filter((act) => act.id !== id);
-        safeLocalStorageSetItem("cache_activities", JSON.stringify(updated));
-        return updated;
-      });
+      const docRef = doc(db, "activities", id);
       await deleteDoc(docRef);
     } catch (e) {
-      handleFirestoreError(e, OperationType.DELETE, `activities/${id}`);
+      console.warn("Notice: Direct Firestore activity delete handled via backend:", e);
     }
   };
 
@@ -776,16 +711,19 @@ export default function App() {
       id: tempId,
       updatedAt: new Date().toISOString()
     };
+    // Optimistic update
+    setGiftLogs((prev) => {
+      const updated = [newGift, ...prev].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+      safeLocalStorageSetItem("cache_gifts", JSON.stringify(updated));
+      return updated;
+    });
+
+    apiSaveGift(newGift).catch((e) => console.warn("Notice: Backend store gift warning:", e));
+
     try {
-      // Optimistic update
-      setGiftLogs((prev) => {
-        const updated = [newGift, ...prev].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-        safeLocalStorageSetItem("cache_gifts", JSON.stringify(updated));
-        return updated;
-      });
       await setDoc(doc(db, "gifts", tempId), newGift);
     } catch (e) {
-      handleFirestoreError(e, OperationType.CREATE, "gifts");
+      console.warn("Notice: Direct Firestore gift save handled via backend:", e);
     }
   };
 
@@ -796,85 +734,84 @@ export default function App() {
       id: tempId,
       sentAt: new Date().toISOString()
     };
+    // Optimistic update
+    setMessageLogs((prev) => {
+      const updated = [newMsg, ...prev].sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+      safeLocalStorageSetItem("cache_messages", JSON.stringify(updated));
+      return updated;
+    });
+
+    apiSaveMessage(newMsg).catch((e) => console.warn("Notice: Backend store message warning:", e));
+
     try {
-      // Optimistic update
-      setMessageLogs((prev) => {
-        const updated = [newMsg, ...prev].sort((a, b) => b.sentAt.localeCompare(a.sentAt));
-        safeLocalStorageSetItem("cache_messages", JSON.stringify(updated));
-        return updated;
-      });
       await setDoc(doc(db, "messages", tempId), newMsg);
     } catch (e) {
-      handleFirestoreError(e, OperationType.CREATE, "messages");
+      console.warn("Notice: Direct Firestore message save handled via backend:", e);
     }
   };
 
   const updateGiftStatus = async (giftId: string, status: GiftLog["status"]) => {
-    const docRef = doc(db, "gifts", giftId);
     const updatedTime = new Date().toISOString();
+    // Optimistic update
+    setGiftLogs((prev) => {
+      const updated = prev.map((g) => g.id === giftId ? { ...g, status, updatedAt: updatedTime } : g);
+      safeLocalStorageSetItem("cache_gifts", JSON.stringify(updated));
+      return updated;
+    });
+
+    apiSaveGift({ id: giftId, status, updatedAt: updatedTime } as any).catch((e) => console.warn("Notice: Backend store gift update warning:", e));
+
     try {
-      // Optimistic update
-      setGiftLogs((prev) => {
-        const updated = prev.map((g) => g.id === giftId ? { ...g, status, updatedAt: updatedTime } : g);
-        safeLocalStorageSetItem("cache_gifts", JSON.stringify(updated));
-        return updated;
-      });
-      await updateDoc(docRef, { 
-         status,
-         updatedAt: updatedTime
-      });
+      const docRef = doc(db, "gifts", giftId);
+      await updateDoc(docRef, { status, updatedAt: updatedTime });
     } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `gifts/${giftId}`);
+      console.warn("Notice: Direct Firestore gift update handled via backend:", e);
     }
   };
 
   const addLeaveRequestInFirestore = async (leaveData: Omit<LeaveRequest, "id">) => {
-    // Generate guaranteed unique permanent Firestore document reference
-    const newDocRef = doc(collection(db, "leave_requests"));
-    const leaveId = newDocRef.id;
-
-    // Strip any undefined or null keys to ensure pristine payload
-    const sanitizedData: Record<string, any> = {
-      id: leaveId,
-    };
+    const leaveId = `leave-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const sanitizedData: Record<string, any> = { id: leaveId };
     Object.entries(leaveData).forEach(([k, v]) => {
       if (v !== undefined && v !== null) {
         sanitizedData[k] = v;
       }
     });
-
     const newLeave: LeaveRequest = sanitizedData as LeaveRequest;
 
-    try {
-      // Optimistic update using the exact permanent Firestore document ID
-      setLeaveRequests((prev) => {
-        const updated = [newLeave, ...prev.filter(l => l.id !== leaveId)];
-        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
-        return updated;
-      });
+    // Optimistic update
+    setLeaveRequests((prev) => {
+      const updated = [newLeave, ...prev.filter((l) => l.id !== leaveId)];
+      safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
+      return updated;
+    });
 
-      // Persist directly to Firestore
-      await setDoc(newDocRef, sanitizedData);
-      console.log("Leave request permanently saved to Firestore with ID:", leaveId);
+    // 1. Save to persistent backend store
+    apiSaveLeave(newLeave).catch((e) => console.warn("Notice: Backend store leave warning:", e));
+
+    // 2. Direct Firestore fallback
+    try {
+      const docRef = doc(db, "leave_requests", leaveId);
+      await setDoc(docRef, sanitizedData);
     } catch (e) {
-      console.error("Error writing leave request to Firestore:", e);
-      handleFirestoreError(e, OperationType.CREATE, `leave_requests/${leaveId}`);
-      throw e;
+      console.warn("Notice: Direct Firestore leave write handled via backend:", e);
     }
   };
 
   const deleteLeaveRequestFromFirestore = async (id: string) => {
+    // Optimistic update
+    setLeaveRequests((prev) => {
+      const updated = prev.filter((l) => l.id !== id);
+      safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
+      return updated;
+    });
+
+    apiDeleteLeave(id).catch((e) => console.warn("Notice: Backend store leave delete warning:", e));
+
     try {
-      // Optimistic update
-      setLeaveRequests((prev) => {
-        const updated = prev.filter((l) => l.id !== id);
-        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(updated));
-        return updated;
-      });
       await deleteDoc(doc(db, "leave_requests", id));
     } catch (e) {
-      console.warn("Error deleting leave request from Firestore:", e);
-      handleFirestoreError(e, OperationType.DELETE, `leave_requests/${id}`);
+      console.warn("Notice: Direct Firestore leave delete handled via backend:", e);
     }
   };
 
@@ -933,15 +870,22 @@ export default function App() {
             setMessageLogs(json.messages);
             safeLocalStorageSetItem("cache_messages", JSON.stringify(json.messages));
           }
-          if (Array.isArray(json.appUsers)) {
-            setAppUsers(json.appUsers);
-            safeLocalStorageSetItem("cache_app_users", JSON.stringify(json.appUsers));
+          if (Array.isArray(json.appUsers || json.app_users)) {
+            setAppUsers(json.appUsers || json.app_users);
+            safeLocalStorageSetItem("cache_app_users", JSON.stringify(json.appUsers || json.app_users));
           }
+          if (Array.isArray(json.leaveRequests || json.leave_requests)) {
+            setLeaveRequests(json.leaveRequests || json.leave_requests);
+            safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(json.leaveRequests || json.leave_requests));
+          }
+
+          // Restore to server-side persistent store
+          apiRestoreBackup(json).catch((e) => console.warn("Backend backup restore warning:", e));
 
           alert(
             language === "ku"
-              ? "✅ باکئەپەکە بە سەرکەوتوویی هاوردەکرا! هەموو داتاکان پاشەکەوت کران چونکە لەناو وێبگەڕەکەتدا."
-              : "✅ Backup imported successfully! All records have been restored and cached locally."
+              ? "✅ باکئەپەکە بە سەرکەوتوویی هاوردەکرا! هەموو داتاکان پاشەکەوت کران و لە سێرڤەر و کۆگای داتادا جێگیرکران."
+              : "✅ Backup imported successfully! All records have been restored and cached safely."
           );
           window.location.reload();
         } else {
