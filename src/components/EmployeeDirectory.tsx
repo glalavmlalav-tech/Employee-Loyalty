@@ -201,6 +201,7 @@ export default function EmployeeDirectory({
 }: EmployeeDirectoryProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const isSuperAdmin = userSession?.role === "super_admin";
+  const isDeveloperOrSuperAdmin = !userSession || userSession.role === "super_admin" || userSession.business === "all";
   const [selectedBusinessFilter, setSelectedBusinessFilter] = useState<BusinessId | "all">(
     userSession && userSession.business !== "all" ? userSession.business : "all"
   );
@@ -526,6 +527,7 @@ export default function EmployeeDirectory({
 
   // Counts for each view based on business restriction
   const activeCount = employees.filter(emp => {
+    if (emp.isDeleted || emp.status === "deleted") return false;
     if (userSession && userSession.business !== "all") {
       const userBiz = userSession.business === "linia" ? "linia_karge" : userSession.business;
       const empBiz = emp.business === "linia" ? "linia_karge" : emp.business;
@@ -537,6 +539,7 @@ export default function EmployeeDirectory({
   }).length;
 
   const archivedCount = employees.filter(emp => {
+    if (emp.isDeleted || emp.status === "deleted") return false;
     if (userSession && userSession.business !== "all") {
       const userBiz = userSession.business === "linia" ? "linia_karge" : userSession.business;
       const empBiz = emp.business === "linia" ? "linia_karge" : emp.business;
@@ -548,6 +551,7 @@ export default function EmployeeDirectory({
   }).length;
 
   const newCount = employees.filter(emp => {
+    if (emp.isDeleted || emp.status === "deleted") return false;
     if (userSession && userSession.business !== "all") {
       const userBiz = userSession.business === "linia" ? "linia_karge" : userSession.business;
       const empBiz = emp.business === "linia" ? "linia_karge" : emp.business;
@@ -562,6 +566,7 @@ export default function EmployeeDirectory({
 
   // Filter Employees
   const filteredEmployees = employees.filter((emp) => {
+    if (emp.isDeleted || emp.status === "deleted") return false;
     if (userSession && userSession.business !== "all") {
       const userBiz = userSession.business === "linia" ? "linia_karge" : userSession.business;
       const empBiz = emp.business === "linia" ? "linia_karge" : emp.business;
@@ -1200,6 +1205,14 @@ export default function EmployeeDirectory({
           }`}>
             {activeCount}
           </span>
+          {isDeveloperOrSuperAdmin && (
+            <span 
+              className="text-[10px] text-slate-400 font-normal font-sans" 
+              title={language === "ku" ? `کۆی گشتی لەگەڵ سەبەتەی خۆڵ: ${employees.length}` : `Total including trash: ${employees.length}`}
+            >
+              ({language === "ku" ? `گشتی: ${employees.length}` : `total: ${employees.length}`})
+            </span>
+          )}
         </button>
 
         <button

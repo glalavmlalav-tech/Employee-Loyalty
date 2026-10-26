@@ -111,6 +111,12 @@ async function asyncSyncToFirestore(col: string, docId: string, data: any, isDel
 
 // Get all data
 export function getAllData() {
+  if (fs.existsSync(STORE_PATH)) {
+    try {
+      const raw = fs.readFileSync(STORE_PATH, "utf-8");
+      memoryState = JSON.parse(raw);
+    } catch (e) {}
+  }
   return {
     ...memoryState,
     version: dataVersion,

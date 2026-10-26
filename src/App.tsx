@@ -476,9 +476,62 @@ export default function App() {
         }
         setDbLoading(false);
         setDbError(null);
+        return;
       }
     } catch (err) {
-      console.warn("Notice: Server bootstrap data fetch fell back to cached/local storage:", err);
+      console.warn("Notice: /api/data not available on this host (e.g. Vercel static deployment), activating direct Firestore fallback:", err);
+    }
+
+    // Direct Firestore fallback for Vercel, static deployments, and edge environments
+    try {
+      const [empSnap, leaveSnap, userSnap, actSnap, giftSnap, msgSnap] = await Promise.all([
+        getDocs(collection(db, "employees")),
+        getDocs(collection(db, "leave_requests")),
+        getDocs(collection(db, "app_users")),
+        getDocs(collection(db, "activities")),
+        getDocs(collection(db, "gifts")),
+        getDocs(collection(db, "messages")),
+      ]);
+
+      if (!empSnap.empty) {
+        const fetchedEmps = empSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Employee));
+        setEmployees(fetchedEmps);
+        safeLocalStorageSetItem("cache_employees", JSON.stringify(fetchedEmps));
+      }
+      if (!leaveSnap.empty) {
+        const fetchedLeaves = leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LeaveRequest));
+        const sorted = fetchedLeaves.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+        setLeaveRequests(sorted);
+        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(sorted));
+      }
+      if (!userSnap.empty) {
+        const fetchedUsers = userSnap.docs.map((d) => ({ id: d.id, ...d.data() } as AppUser));
+        setAppUsers(fetchedUsers);
+        safeLocalStorageSetItem("cache_app_users", JSON.stringify(fetchedUsers));
+        setAppUsersLoaded(true);
+      }
+      if (!actSnap.empty) {
+        const fetchedActs = actSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LoyaltyActivity));
+        const sorted = fetchedActs.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+        setActivities(sorted);
+        safeLocalStorageSetItem("cache_activities", JSON.stringify(sorted));
+      }
+      if (!giftSnap.empty) {
+        const fetchedGifts = giftSnap.docs.map((d) => ({ id: d.id, ...d.data() } as GiftLog));
+        const sorted = fetchedGifts.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+        setGiftLogs(sorted);
+        safeLocalStorageSetItem("cache_gifts", JSON.stringify(sorted));
+      }
+      if (!msgSnap.empty) {
+        const fetchedMsgs = msgSnap.docs.map((d) => ({ id: d.id, ...d.data() } as SentMessageLog));
+        const sorted = fetchedMsgs.sort((a, b) => (b.sentAt || "").localeCompare(a.sentAt || ""));
+        setMessageLogs(sorted);
+        safeLocalStorageSetItem("cache_messages", JSON.stringify(sorted));
+      }
+      setDbLoading(false);
+      setDbError(null);
+    } catch (fsErr) {
+      console.warn("Notice: Firestore fallback sync completed or handled cached mode:", fsErr);
       setDbLoading(false);
     }
   }, []);
@@ -575,8 +628,9 @@ export default function App() {
 
   const deleteEmployeeFromFirestore = async (id: string) => {
     const senderName = userSession?.name || sandboxGuest || "Admin";
-    const deletionPayload = {
+    const deletionPayload: Partial<Employee> = {
       isDeleted: true,
+      status: "deleted" as any,
       deletedAt: new Date().toISOString(),
       deletedBy: senderName
     };
@@ -599,11 +653,18 @@ export default function App() {
   };
 
   const restoreEmployeeFromTrash = async (id: string) => {
+    const restorePayload: Partial<Employee> = {
+      isDeleted: false,
+      status: "active",
+      deletedAt: null as any,
+      deletedBy: null as any
+    };
+
     // Optimistic update
     setEmployees((prev) => {
       const updated = prev.map((e) => {
         if (e.id === id) {
-          const copy = { ...e };
+          const copy = { ...e, status: "active" as const };
           delete copy.isDeleted;
           delete copy.deletedAt;
           delete copy.deletedBy;
@@ -615,14 +676,15 @@ export default function App() {
       return updated;
     });
 
-    apiUpdateEmployee(id, { isDeleted: false, deletedAt: null as any, deletedBy: null as any }).catch((e) => console.warn("Notice: Backend store restore warning:", e));
+    apiUpdateEmployee(id, restorePayload).catch((e) => console.warn("Notice: Backend store restore warning:", e));
 
     try {
       const docRef = doc(db, "employees", id);
       await updateDoc(docRef, {
         isDeleted: deleteField(),
         deletedAt: deleteField(),
-        deletedBy: deleteField()
+        deletedBy: deleteField(),
+        status: "active"
       });
     } catch (e) {
       console.warn("Notice: Direct Firestore restore handled via backend:", e);
@@ -1075,10 +1137,14 @@ export default function App() {
   const isRestrictedBusiness = !!(userSession && userSession.business !== "all");
   const restrictedBusinessId = userSession?.business;
   const isSuperAdmin = userSession?.role === "super_admin";
+  const isDeveloperOrSuperAdmin = !userSession || userSession.role === "super_admin" || userSession.business === "all";
+
+  const totalEmployeesWithTrash = employees.length;
+  const totalTrashCount = employees.filter((e) => e.isDeleted || e.status === "deleted").length;
 
   const displayEmployees = employees.filter((e) => {
     // Exclude soft deleted / trash employees from active views
-    if (e.isDeleted) {
+    if (e.isDeleted || e.status === "deleted") {
       return false;
     }
     // 1. Business boundary alignment
@@ -1095,7 +1161,7 @@ export default function App() {
 
   const trashEmployees = employees.filter((e) => {
     // Only soft deleted / trash employees
-    if (!e.isDeleted) {
+    if (!e.isDeleted && e.status !== "deleted") {
       return false;
     }
     // Business boundary alignment
@@ -1130,7 +1196,7 @@ export default function App() {
     : activities;
 
   const businessTotalEmployeesCount = (() => {
-    const activeEmps = employees.filter((e) => !e.status || e.status === "active");
+    const activeEmps = employees.filter((e) => !e.isDeleted && e.status !== "deleted" && (!e.status || e.status === "active"));
     if (!userSession || isSuperAdmin || userSession.business === "all") {
       return activeEmps.length;
     }
@@ -1527,10 +1593,21 @@ export default function App() {
                 {activeTab === "months" && t.monthsTab.split(" ")[0]}
                 {activeTab === "trash" && (language === "ku" ? "سەبەتەی خۆڵ 🗑️" : "Trash Bin 🗑️")}
               </h2>
-              <p className="text-[11px] lg:text-xs text-slate-500 font-bold select-none">
-                {language === "ku" 
-                  ? `${employees.filter((e) => !e.status || e.status === "active").length} کارمەندی چالاک لە دامەزراوەکان` 
-                  : `${employees.filter((e) => !e.status || e.status === "active").length} Active employees in corporations`}
+              <p className="text-[11px] lg:text-xs text-slate-500 font-bold select-none flex items-center gap-1.5 flex-wrap">
+                <span>
+                  {language === "ku" 
+                    ? (isRestrictedBusiness 
+                        ? `${businessTotalEmployeesCount} کارمەندی چالاک لەم بەشەدا` 
+                        : `${businessTotalEmployeesCount} کارمەندی چالاک لە دامەزراوەکان`)
+                    : `${businessTotalEmployeesCount} Active employees`}
+                </span>
+                {isDeveloperOrSuperAdmin && (
+                  <span className="text-slate-400 font-normal text-[10px]">
+                    {language === "ku" 
+                      ? `(${totalEmployeesWithTrash} بە سەبەتەی خۆڵەوە)` 
+                      : `(${totalEmployeesWithTrash} total incl. trash)`}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -1664,15 +1741,28 @@ export default function App() {
             {/* Total Corporate Staff widget */}
             <div className="glass-panel rounded-[24px] p-6 flex items-center justify-between glass-card-hover">
               <div>
-                <div className="text-slate-400 text-xs font-bold uppercase mb-1.5 select-none">{t.activeStaffTitle}</div>
-                <div className="text-3xl font-black text-slate-800 font-display">{businessTotalEmployeesCount}</div>
+                <div className="text-slate-400 text-xs font-bold uppercase mb-1.5 select-none">
+                  {isRestrictedBusiness 
+                    ? (language === "ku" ? "کۆی کارمەندە چالاکەکانی ئەم بەشە" : "Active Branch Staff")
+                    : t.activeStaffTitle}
+                </div>
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="text-3xl font-black text-slate-800 font-display">{businessTotalEmployeesCount}</span>
+                  {isDeveloperOrSuperAdmin && (
+                    <span className="text-xs font-normal text-slate-400 select-none">
+                      {language === "ku" 
+                        ? `(کۆی گشتی: ${totalEmployeesWithTrash} بە ${totalTrashCount} لە سەبەتەی خۆڵ)` 
+                        : `(Total: ${totalEmployeesWithTrash} incl. ${totalTrashCount} in trash)`}
+                    </span>
+                  )}
+                </div>
                 <div className="text-[10px] text-slate-500 font-bold mt-1.5">
                   {isRestrictedBusiness && restrictedBusinessId ? (
                     language === "ku" 
-                      ? `بەڕێوەبردن لە کۆمپانیای ${BUSINESSES[restrictedBusinessId]?.nameKu || restrictedBusinessId}` 
-                      : `Managing in ${BUSINESSES[restrictedBusinessId]?.nameEn || restrictedBusinessId}`
+                      ? `تەنها کارمەندە چالاکەکانی کۆمپانیای ${BUSINESSES[restrictedBusinessId]?.nameKu || restrictedBusinessId}` 
+                      : `Active employees of ${BUSINESSES[restrictedBusinessId]?.nameEn || restrictedBusinessId}`
                   ) : (
-                    language === "ku" ? "کۆی گشتی هەرسێ کۆمپانیا (لینیا، ماسیمۆ، لیستۆن)" : "Total of all 3 corporations"
+                    language === "ku" ? "کۆی گشتی کارمەندە چالاکەکانی هەرسێ کۆمپانیا" : "Total active staff across all corporations"
                   )}
                 </div>
               </div>

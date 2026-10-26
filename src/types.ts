@@ -85,7 +85,7 @@ export const BUSINESSES: Record<BusinessId, BusinessInfo> = {
 };
 
 export type MaritalStatus = "single" | "married";
-export type EmployeeStatus = "active" | "suspended" | "retired";
+export type EmployeeStatus = "active" | "suspended" | "retired" | "deleted";
 
 export interface Employee {
   id: string;
