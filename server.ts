@@ -27,7 +27,8 @@ import {
   saveMessage,
   saveSettings,
   restoreStore,
-  pullFromFirestore
+  getDbDiagnostics,
+  getDbTableRows
 } from "./api/dataStore.ts";
 
 // In-memory cache for developer uploaded custom PWA icons
@@ -322,13 +323,25 @@ app.post("/api/backup/restore", (req, res) => {
   }
 });
 
-// Manual Sync Pull from Firestore
-app.post("/api/sync/pull-from-firestore", async (req, res) => {
+// SQL Database Engine Diagnostics
+app.get("/api/sql/status", (req, res) => {
   try {
-    const result = await pullFromFirestore();
-    res.json(result);
+    const diag = getDbDiagnostics();
+    res.json({ success: true, ...diag });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// SQL Database Table Inspector (live rows from SQLite)
+app.get("/api/sql/inspect", (req, res) => {
+  try {
+    const tableName = (req.query.table as string) || "employees";
+    const limit = parseInt(req.query.limit as string) || 50;
+    const rows = getDbTableRows(tableName, limit);
+    res.json({ success: true, table: tableName, count: rows.length, rows });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
   }
 });
 

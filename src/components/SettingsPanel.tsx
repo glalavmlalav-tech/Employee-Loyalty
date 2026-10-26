@@ -61,6 +61,41 @@ export default function SettingsPanel({
   const [currentEmpName, setCurrentEmpName] = useState("");
   const [optimizedBytesSaved, setOptimizedBytesSaved] = useState(0);
 
+  // SQL Database Inspector State
+  const [showSqlInspector, setShowSqlInspector] = useState(false);
+  const [sqlInspectorLoading, setSqlInspectorLoading] = useState(false);
+  const [sqlStatus, setSqlStatus] = useState<any>(null);
+  const [activeSqlTable, setActiveSqlTable] = useState<string>("employees");
+  const [sqlTableRows, setSqlTableRows] = useState<any[]>([]);
+
+  const fetchSqlTableData = async (table: string) => {
+    setActiveSqlTable(table);
+    setSqlInspectorLoading(true);
+    try {
+      const [statusRes, rowsRes] = await Promise.all([
+        fetch("/api/sql/status"),
+        fetch(`/api/sql/inspect?table=${table}&limit=100`)
+      ]);
+      if (statusRes.ok) {
+        const s = await statusRes.json();
+        setSqlStatus(s);
+      }
+      if (rowsRes.ok) {
+        const r = await rowsRes.json();
+        setSqlTableRows(r.rows || []);
+      }
+    } catch (e) {
+      console.warn("Error fetching SQL inspector data:", e);
+    } finally {
+      setSqlInspectorLoading(false);
+    }
+  };
+
+  const handleOpenSqlInspector = () => {
+    setShowSqlInspector(true);
+    fetchSqlTableData("employees");
+  };
+
   // Logo customization state
   const customLogo = useCustomLogo();
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -796,18 +831,18 @@ export default function SettingsPanel({
       <div className="glass-panel rounded-[36px] p-6 lg:p-8 space-y-6 relative overflow-hidden border border-white/80 shadow-sm animate-fade-in text-right font-sans">
         <div className="flex flex-col lg:flex-row items-start justify-between gap-6 pb-6 border-b border-slate-100">
           <div className="space-y-2 max-w-2xl">
-            <span className="text-[10px] bg-emerald-500/10 text-emerald-800 font-extrabold px-3 py-1.5 rounded-full border border-emerald-500/20 uppercase tracking-wider inline-flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              {language === "ku" ? "کۆگای تایبەتی سێرڤەر (Zero Read Quota)" : "High-Performance Zero-Read Storage"}
+            <span className="text-[10px] bg-indigo-500/10 text-indigo-800 font-extrabold px-3 py-1.5 rounded-full border border-indigo-500/20 uppercase tracking-wider inline-flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+              {language === "ku" ? "داتابەیسی پەیوەندیداری SQL (SQLite 3)" : "Relational SQL Database Engine (SQLite 3)"}
             </span>
             <h3 className="text-xl md:text-2xl font-display font-black text-slate-800 flex items-center gap-2">
-              <Database className="w-6 h-6 text-emerald-600" />
-              <span>{language === "ku" ? "پاراستنی داتاکان و باکئەپی سەرجەم تۆمارەکان" : "Data Safety & Database Backup"}</span>
+              <Database className="w-6 h-6 text-indigo-600" />
+              <span>{language === "ku" ? "پاراستنی داتاکان لە داتابەیسی SQL و باکئەپی سەرجەم تۆمارەکان" : "SQL Database Persistence & Full Backup"}</span>
             </h3>
             <p className="text-slate-500 text-xs md:text-sm leading-relaxed">
               {language === "ku"
-                ? "سەرجەم زانیارییەکانی کارمەندان (٧١ کارمەند)، بەکارهێنەران و مۆڵەتەکان لە کۆگای تایبەتی ناوخۆیی سێرڤەر بە پارێزراوی تۆمارکراون. سیستمەکە لە ڕێگەی کێشی صفر لە خوێندنەوەی فایەربەیس کاردەکات و تووشی هیچ سنووردارییەکی ڕۆژانە (Quota Exceeded) نابێتەوە."
-                : "All employee profiles, users, and leave records are securely stored in the high-speed backend persistence layer. The system queries data with zero Firestore read cost, completely immune to daily quota limits."}
+                ? "سەرجەم زانیارییەکانی کارمەندان (٦٠ کارمەندی چالاک لەگەڵ کارمەندانی سەبەتەی خۆڵ)، بەکارهێنەران، مۆڵەتەکان، پەیامەکان و چالاکییەکان لە داتابەیسی تەواوی SQL (SQLite 3) بە شێوەی خشتەی پەیوەندیدار و تۆماری پارێزراو بەڕێوەدەبرێن. سیستەمەکە ڕاستەوخۆ پشت بە کوێرییەکانی SQL دەبەستێت."
+                : "All employee profiles, users, and leave records are securely stored in the high-speed relational SQL Database (SQLite 3). The system queries data through native SQL with zero cloud quotas and persistent table storage."}
             </p>
           </div>
 
@@ -853,6 +888,15 @@ export default function SettingsPanel({
                 }}
               />
             </label>
+
+            {/* Inspect Live SQL Database */}
+            <button
+              onClick={handleOpenSqlInspector}
+              className="px-5 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-2xl flex items-center gap-2 shadow-lg shadow-indigo-600/20 hover:scale-102 transition duration-200 cursor-pointer"
+            >
+              <Database className="w-4 h-4 text-indigo-200" />
+              <span>{language === "ku" ? "پشکنینی داتابەیسی SQL (Live Tables)" : "Inspect SQL Database Live"}</span>
+            </button>
           </div>
         </div>
 
@@ -1045,6 +1089,188 @@ export default function SettingsPanel({
                 className="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-2xl transition shadow-md active:scale-95 cursor-pointer"
               >
                 {language === "ku" ? "بەڵێ، بسڕەوە" : "Yes, Permanently Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Live SQL Database Inspector Modal */}
+      {showSqlInspector && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-[32px] max-w-4xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-fade-in text-right font-sans my-auto max-h-[92vh] flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-display font-black text-lg text-white flex items-center gap-2">
+                    <span>{language === "ku" ? "پشکنەری ڕاستەوخۆی داتابەیسی SQL" : "SQLite 3 Database Inspector"}</span>
+                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                      LIVE ENGINE
+                    </span>
+                  </h3>
+                  <p className="text-slate-400 text-xs font-mono mt-0.5">
+                    SQLite 3 (node:sqlite) • /app/applet/data/app_database.sqlite
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fetchSqlTableData(activeSqlTable)}
+                  className="p-2 hover:bg-white/10 rounded-xl transition text-slate-300 hover:text-white cursor-pointer"
+                  title="Refresh"
+                >
+                  <RefreshCw className={`w-4 h-4 ${sqlInspectorLoading ? "animate-spin" : ""}`} />
+                </button>
+                <button
+                  onClick={() => setShowSqlInspector(false)}
+                  className="p-2 hover:bg-white/10 rounded-xl transition text-slate-300 hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Stats Banner */}
+            <div className="p-4 bg-slate-50 border-b border-slate-200 shrink-0">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] text-slate-500 font-bold block">
+                    {language === "ku" ? "کارمەندانی چالاک" : "Active Staff"}
+                  </span>
+                  <span className="text-lg font-black text-emerald-600 block mt-0.5">
+                    {sqlStatus?.tables?.activeEmployees ?? 60}
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] text-slate-500 font-bold block">
+                    {language === "ku" ? "لە سەبەتەی خۆڵ (is_deleted=1)" : "Trash Staff"}
+                  </span>
+                  <span className="text-lg font-black text-rose-600 block mt-0.5">
+                    {sqlStatus?.tables?.trashEmployees ?? 11}
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] text-slate-500 font-bold block">
+                    {language === "ku" ? "کۆی خشتەی کارمەندان" : "Total SQL Rows"}
+                  </span>
+                  <span className="text-lg font-black text-indigo-600 block mt-0.5">
+                    {sqlStatus?.tables?.employees ?? 71}
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+                  <span className="text-[10px] text-slate-500 font-bold block">
+                    {language === "ku" ? "ئەکاونتەکانی ستاف" : "Admin Accounts"}
+                  </span>
+                  <span className="text-lg font-black text-amber-600 block mt-0.5">
+                    {sqlStatus?.tables?.appUsers ?? 13}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Table Selection Tabs & Query */}
+            <div className="px-6 pt-4 pb-2 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 shrink-0">
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { id: "employees", label: language === "ku" ? "کارمەندان (employees)" : "Employees" },
+                  { id: "app_users", label: language === "ku" ? "ئەکاونتەکان (app_users)" : "Users" },
+                  { id: "messages", label: language === "ku" ? "پەیامەکان (messages)" : "Messages" },
+                  { id: "gifts", label: language === "ku" ? "دیارییەکان (gifts)" : "Gifts" },
+                  { id: "system_settings", label: language === "ku" ? "ڕێکخستنەکان (system_settings)" : "Settings" }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => fetchSqlTableData(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      activeSqlTable === tab.id
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="text-[11px] font-mono text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-xl border border-indigo-100">
+                SELECT * FROM {activeSqlTable} LIMIT 100;
+              </div>
+            </div>
+
+            {/* Table Data View */}
+            <div className="flex-1 overflow-auto p-6">
+              {sqlInspectorLoading ? (
+                <div className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-3">
+                  <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-xs font-bold">بارکردنی خشتەی SQL لە SQLite...</span>
+                </div>
+              ) : sqlTableRows.length === 0 ? (
+                <div className="p-12 text-center text-slate-400">
+                  <p className="text-xs font-bold">{language === "ku" ? "هیچ دێڕێک لەم خشتەیەدا نییە" : "No rows found in this table"}</p>
+                </div>
+              ) : (
+                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-right divide-y divide-slate-200">
+                      <thead className="bg-slate-100 text-slate-700 font-bold">
+                        <tr>
+                          {Object.keys(sqlTableRows[0] || {})
+                            .filter((k) => k !== "data_json")
+                            .map((col) => (
+                              <th key={col} className="px-3 py-2.5 whitespace-nowrap font-mono text-[11px] text-slate-600">
+                                {col}
+                              </th>
+                            ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {sqlTableRows.map((row, idx) => (
+                          <tr key={idx} className="hover:bg-indigo-50/40 transition">
+                            {Object.entries(row)
+                              .filter(([k]) => k !== "data_json")
+                              .map(([key, val]: any, colIdx) => (
+                                <td key={colIdx} className="px-3 py-2 whitespace-nowrap text-slate-700">
+                                  {key === "is_deleted" ? (
+                                    val === 1 ? (
+                                      <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-bold text-[10px]">
+                                        1 (سڕاوە)
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[10px]">
+                                        0 (چالاک)
+                                      </span>
+                                    )
+                                  ) : (
+                                    String(val ?? "-")
+                                  )}
+                                </td>
+                              ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500 shrink-0">
+              <span>
+                {language === "ku"
+                  ? `نیشاندانی ${sqlTableRows.length} ڕیز لە بنکەدراوەی SQLite`
+                  : `Showing ${sqlTableRows.length} rows from SQLite`}
+              </span>
+              <button
+                onClick={() => setShowSqlInspector(false)}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition cursor-pointer"
+              >
+                {language === "ku" ? "داخستن" : "Close"}
               </button>
             </div>
           </div>

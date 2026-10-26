@@ -1,19 +1,26 @@
 import fs from "fs";
 import path from "path";
-import { initializeApp } from "firebase/app";
-import { 
-  getFirestore, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  collection, 
-  getDocs,
-  Firestore
-} from "firebase/firestore";
+import {
+  getSqliteDb,
+  sqlFetchAllData,
+  sqlInsertOrUpdateEmployee,
+  sqlUpdateEmployeeFields,
+  sqlDeleteEmployeePermanently,
+  sqlInsertOrUpdateLeave,
+  sqlUpdateLeaveFields,
+  sqlDeleteLeave,
+  sqlInsertOrUpdateAppUser,
+  sqlInsertOrUpdateActivity,
+  sqlInsertOrUpdateGift,
+  sqlInsertOrUpdateMessage,
+  sqlInsertOrUpdateSettings,
+  sqlRestoreAllData,
+  getSqlDiagnostics,
+  sqlInspectTable
+} from "./sqlDatabase.ts";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
-const BACKUP_PATH = path.join(process.cwd(), "firestore-backup.json");
 
 export interface DataStoreState {
   employees: any[];
@@ -37,50 +44,36 @@ let memoryState: DataStoreState = {
 
 let dataVersion = 1;
 
-// Initialize Firebase for backend background syncing
-let firestoreDb: Firestore | null = null;
-
-try {
-  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  if (fs.existsSync(configPath)) {
-    const configRaw = fs.readFileSync(configPath, "utf-8");
-    const firebaseConfig = JSON.parse(configRaw);
-    const fbApp = initializeApp(firebaseConfig, "backend-sync-app");
-    firestoreDb = getFirestore(fbApp, firebaseConfig.firestoreDatabaseId);
-    console.log("Backend Firestore background sync initialized successfully.");
-  }
-} catch (e: any) {
-  console.warn("Notice: Firestore backend sync initialization skipped:", e?.message);
-}
-
-// Load data into memory on module load
+// Load data into memory on module load from SQL
 export function initStore(): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-
-  if (fs.existsSync(STORE_PATH)) {
-    try {
-      const raw = fs.readFileSync(STORE_PATH, "utf-8");
-      memoryState = JSON.parse(raw);
-      console.log(`Loaded ${memoryState.employees?.length || 0} employees from ${STORE_PATH}`);
-    } catch (e) {
-      console.error("Failed to parse store.json:", e);
-    }
-  } else if (fs.existsSync(BACKUP_PATH)) {
-    try {
-      const raw = fs.readFileSync(BACKUP_PATH, "utf-8");
-      memoryState = JSON.parse(raw);
-      persistStore();
-      console.log(`Initialized store.json from backup with ${memoryState.employees?.length || 0} employees`);
-    } catch (e) {
-      console.error("Failed to initialize from backup:", e);
+  try {
+    getSqliteDb();
+    const sqlData = sqlFetchAllData();
+    memoryState = {
+      employees: sqlData.employees || [],
+      leave_requests: sqlData.leave_requests || [],
+      app_users: sqlData.app_users || [],
+      activities: sqlData.activities || [],
+      gifts: sqlData.gifts || [],
+      messages: sqlData.messages || [],
+      system_settings: sqlData.system_settings || []
+    };
+    persistStoreMirror();
+    console.log(`[DataStore] Loaded ${memoryState.employees.length} employees from SQL database.`);
+  } catch (e) {
+    console.error("[DataStore] Failed to initialize from SQL database:", e);
+    // Fallback to store.json if SQLite had an issue
+    if (fs.existsSync(STORE_PATH)) {
+      try {
+        const raw = fs.readFileSync(STORE_PATH, "utf-8");
+        memoryState = JSON.parse(raw);
+      } catch (err) {}
     }
   }
 }
 
-// Persist memory state to disk
-export function persistStore(): void {
+// Persist JSON mirror to disk for instant external backup compatibility
+function persistStoreMirror(): void {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -88,37 +81,24 @@ export function persistStore(): void {
     fs.writeFileSync(STORE_PATH, JSON.stringify(memoryState, null, 2), "utf-8");
     dataVersion++;
   } catch (e) {
-    console.error("Error saving store.json:", e);
+    console.error("Error saving store mirror:", e);
   }
 }
 
-// Asynchronously sync a change to Firestore without blocking the client or burning read quota
-async function asyncSyncToFirestore(col: string, docId: string, data: any, isDelete = false) {
-  if (!firestoreDb) return;
-  try {
-    const docRef = doc(firestoreDb, col, docId);
-    if (isDelete) {
-      await deleteDoc(docRef);
-      console.log(`Synced DELETE ${col}/${docId} to Firestore.`);
-    } else {
-      await setDoc(docRef, data, { merge: true });
-      console.log(`Synced WRITE ${col}/${docId} to Firestore.`);
-    }
-  } catch (err: any) {
-    console.warn(`Background Firestore sync warning for ${col}/${docId}:`, err?.message);
-  }
-}
-
-// Get all data
+// Get all data directly from SQL
 export function getAllData() {
-  if (fs.existsSync(STORE_PATH)) {
-    try {
-      const raw = fs.readFileSync(STORE_PATH, "utf-8");
-      memoryState = JSON.parse(raw);
-    } catch (e) {}
+  try {
+    const sqlData = sqlFetchAllData();
+    if (sqlData && sqlData.employees && sqlData.employees.length > 0) {
+      memoryState = sqlData as DataStoreState;
+    }
+  } catch (e) {
+    console.warn("Notice: Fetching from memory cache fallback:", e);
   }
+
   return {
     ...memoryState,
+    databaseEngine: "SQLite 3",
     version: dataVersion,
     timestamp: new Date().toISOString()
   };
@@ -128,12 +108,16 @@ export function getDataVersion(): number {
   return dataVersion;
 }
 
-// Employee Operations
+// Employee Operations via SQL
 export function getEmployees() {
   return memoryState.employees || [];
 }
 
 export function saveEmployee(employee: any) {
+  // 1. Save to SQL
+  sqlInsertOrUpdateEmployee(employee);
+
+  // 2. Update memory state
   if (!memoryState.employees) memoryState.employees = [];
   const idx = memoryState.employees.findIndex((e) => e.id === employee.id);
   if (idx >= 0) {
@@ -141,37 +125,47 @@ export function saveEmployee(employee: any) {
   } else {
     memoryState.employees.push(employee);
   }
-  persistStore();
-  asyncSyncToFirestore("employees", employee.id, employee);
+  persistStoreMirror();
   return employee;
 }
 
 export function updateEmployee(id: string, partial: any) {
+  // 1. Save to SQL
+  const updatedInSql = sqlUpdateEmployeeFields(id, partial);
+
+  // 2. Update memory state
   if (!memoryState.employees) memoryState.employees = [];
   const idx = memoryState.employees.findIndex((e) => e.id === id);
   if (idx >= 0) {
     memoryState.employees[idx] = { ...memoryState.employees[idx], ...partial };
-    persistStore();
-    asyncSyncToFirestore("employees", id, memoryState.employees[idx]);
+    persistStoreMirror();
     return memoryState.employees[idx];
+  } else {
+    memoryState.employees.push(updatedInSql);
+    persistStoreMirror();
+    return updatedInSql;
   }
-  return null;
 }
 
 export function deleteEmployee(id: string) {
+  // 1. Delete from SQL
+  sqlDeleteEmployeePermanently(id);
+
+  // 2. Update memory state
   if (!memoryState.employees) memoryState.employees = [];
   memoryState.employees = memoryState.employees.filter((e) => e.id !== id);
-  persistStore();
-  asyncSyncToFirestore("employees", id, null, true);
+  persistStoreMirror();
   return true;
 }
 
-// Leave Request Operations
+// Leave Request Operations via SQL
 export function getLeaveRequests() {
   return memoryState.leave_requests || [];
 }
 
 export function saveLeaveRequest(leave: any) {
+  sqlInsertOrUpdateLeave(leave);
+
   if (!memoryState.leave_requests) memoryState.leave_requests = [];
   const idx = memoryState.leave_requests.findIndex((l) => l.id === leave.id);
   if (idx >= 0) {
@@ -179,37 +173,43 @@ export function saveLeaveRequest(leave: any) {
   } else {
     memoryState.leave_requests.push(leave);
   }
-  persistStore();
-  asyncSyncToFirestore("leave_requests", leave.id, leave);
+  persistStoreMirror();
   return leave;
 }
 
 export function updateLeaveRequest(id: string, partial: any) {
+  const updated = sqlUpdateLeaveFields(id, partial);
+
   if (!memoryState.leave_requests) memoryState.leave_requests = [];
   const idx = memoryState.leave_requests.findIndex((l) => l.id === id);
   if (idx >= 0) {
     memoryState.leave_requests[idx] = { ...memoryState.leave_requests[idx], ...partial };
-    persistStore();
-    asyncSyncToFirestore("leave_requests", id, memoryState.leave_requests[idx]);
+    persistStoreMirror();
     return memoryState.leave_requests[idx];
+  } else {
+    memoryState.leave_requests.push(updated);
+    persistStoreMirror();
+    return updated;
   }
-  return null;
 }
 
 export function deleteLeaveRequest(id: string) {
+  sqlDeleteLeave(id);
+
   if (!memoryState.leave_requests) memoryState.leave_requests = [];
   memoryState.leave_requests = memoryState.leave_requests.filter((l) => l.id !== id);
-  persistStore();
-  asyncSyncToFirestore("leave_requests", id, null, true);
+  persistStoreMirror();
   return true;
 }
 
-// App Users Operations
+// App Users Operations via SQL
 export function getAppUsers() {
   return memoryState.app_users || [];
 }
 
 export function saveAppUser(user: any) {
+  sqlInsertOrUpdateAppUser(user);
+
   if (!memoryState.app_users) memoryState.app_users = [];
   const idx = memoryState.app_users.findIndex((u) => u.id === user.id || u.username === user.username);
   if (idx >= 0) {
@@ -217,85 +217,78 @@ export function saveAppUser(user: any) {
   } else {
     memoryState.app_users.push(user);
   }
-  persistStore();
-  asyncSyncToFirestore("app_users", user.username || user.id, user);
+  persistStoreMirror();
   return user;
 }
 
-// Activities, Gifts, Messages, Settings
+// Activities, Gifts, Messages, Settings via SQL
 export function saveActivity(act: any) {
+  sqlInsertOrUpdateActivity(act);
+
   if (!memoryState.activities) memoryState.activities = [];
   const idx = memoryState.activities.findIndex((a) => a.id === act.id);
   if (idx >= 0) memoryState.activities[idx] = { ...memoryState.activities[idx], ...act };
   else memoryState.activities.push(act);
-  persistStore();
-  asyncSyncToFirestore("activities", act.id, act);
+  persistStoreMirror();
   return act;
 }
 
 export function saveGift(gift: any) {
+  sqlInsertOrUpdateGift(gift);
+
   if (!memoryState.gifts) memoryState.gifts = [];
   const idx = memoryState.gifts.findIndex((g) => g.id === gift.id);
   if (idx >= 0) memoryState.gifts[idx] = { ...memoryState.gifts[idx], ...gift };
   else memoryState.gifts.push(gift);
-  persistStore();
-  asyncSyncToFirestore("gifts", gift.id, gift);
+  persistStoreMirror();
   return gift;
 }
 
 export function saveMessage(msg: any) {
+  sqlInsertOrUpdateMessage(msg);
+
   if (!memoryState.messages) memoryState.messages = [];
   const idx = memoryState.messages.findIndex((m) => m.id === msg.id);
   if (idx >= 0) memoryState.messages[idx] = { ...memoryState.messages[idx], ...msg };
   else memoryState.messages.push(msg);
-  persistStore();
-  asyncSyncToFirestore("messages", msg.id, msg);
+  persistStoreMirror();
   return msg;
 }
 
 export function saveSettings(settings: any) {
+  sqlInsertOrUpdateSettings(settings);
+
   memoryState.system_settings = [settings];
-  persistStore();
-  asyncSyncToFirestore("system_settings", "branding", settings);
+  persistStoreMirror();
   return settings;
 }
 
-// Restore entire backup
+// Restore entire backup via SQL transaction
 export function restoreStore(fullData: any) {
   if (!fullData || typeof fullData !== "object") {
     throw new Error("Invalid backup data format");
   }
+  const restored = sqlRestoreAllData(fullData);
   memoryState = {
-    employees: Array.isArray(fullData.employees) ? fullData.employees : memoryState.employees,
-    leave_requests: Array.isArray(fullData.leave_requests) ? fullData.leave_requests : memoryState.leave_requests,
-    app_users: Array.isArray(fullData.app_users) ? fullData.app_users : memoryState.app_users,
-    activities: Array.isArray(fullData.activities) ? fullData.activities : memoryState.activities,
-    gifts: Array.isArray(fullData.gifts) ? fullData.gifts : memoryState.gifts,
-    messages: Array.isArray(fullData.messages) ? fullData.messages : memoryState.messages,
-    system_settings: Array.isArray(fullData.system_settings) ? fullData.system_settings : memoryState.system_settings
+    employees: restored.employees || [],
+    leave_requests: restored.leave_requests || [],
+    app_users: restored.app_users || [],
+    activities: restored.activities || [],
+    gifts: restored.gifts || [],
+    messages: restored.messages || [],
+    system_settings: restored.system_settings || []
   };
-  persistStore();
+  persistStoreMirror();
   return getAllData();
 }
 
-// Pull fresh state from Firestore
-export async function pullFromFirestore(): Promise<{ success: boolean; stats: Record<string, number> }> {
-  if (!firestoreDb) throw new Error("Firestore not initialized on server");
-  const stats: Record<string, number> = {};
-  const collections = ["employees", "leave_requests", "app_users", "activities", "gifts", "messages", "system_settings"];
-  
-  for (const col of collections) {
-    try {
-      const snap = await getDocs(collection(firestoreDb, col));
-      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      (memoryState as any)[col] = docs;
-      stats[col] = docs.length;
-    } catch (e: any) {
-      console.warn(`Pull collection ${col} warning:`, e?.message);
-    }
-  }
-  persistStore();
-  return { success: true, stats };
+// Diagnostics
+export function getDbDiagnostics() {
+  return getSqlDiagnostics();
+}
+
+export function getDbTableRows(tableName: string, limit = 100) {
+  return sqlInspectTable(tableName, limit);
 }
 
 // Initialize on boot

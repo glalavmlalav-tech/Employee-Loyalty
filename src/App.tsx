@@ -74,7 +74,7 @@ import {
   apiSaveMessage, 
   apiSaveAppUser,
   apiRestoreBackup,
-  apiPullFromFirestore
+  apiGetSqlStatus
 } from "./utils/apiClient";
 
 const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
@@ -1126,10 +1126,10 @@ export default function App() {
     activeStaffTitle: language === "ku" ? "کۆی گشتی کارمەندان" : "Total Corporate Staff",
     activeWarnings: language === "ku" ? "بۆنەی بەپەلە (٤٨ کاتژمێر پێش و دوای بۆنە)" : "Milestone Alerts (48h Buffer)",
     rewardPointsTotal: language === "ku" ? "مۆڕاڵ و دۆخی گشتی ستاف" : "General Staff Morale Status",
-    multiDeviceLogo: language === "ku" ? "فایەربەیس هاوبەشکراو لەسەر چەندین ئامێر" : "Cloud Firebase Sync Enabled (Live updates across tabs)",
+    multiDeviceLogo: language === "ku" ? "داتابەیسی SQL هاوبەشکراو لەسەر چەندین ئامێر" : "SQL Database Engine (Live sync across devices)",
     demoWarning: language === "ku" ? "دۆسیەی کارمەندان بەتاڵە! دەتەوێت زانیاری کارمەندانی ڕاستەقینەی هەر سێ کۆمپانیاکە زیادبکەین کە لەگەڵ ڕێکەوتەکانی پیرۆزباییدا بگونجێت تا کارکردنی سیستەمەکە ببینی؟" : "Database looks empty! Would you like to initialize Kurdish employee portfolios with pre-configured birthday and wedding anniversaries to witness the automated warnings?",
     demoWarningBtn: language === "ku" ? "دروستکردنی ستافی ئەزموونی دەستبەجێ" : "Seed Premium Employee Datasets",
-    loadingText: language === "ku" ? "بارکردنی زانیارییەکان لە فایەربەیسەوە چاوەڕوان بە..." : "Communicating with Firebase Real-Time Cloud Databases...",
+    loadingText: language === "ku" ? "بارکردنی زانیارییەکان لە داتابەیسی SQLـەوە، چاوەڕوان بە..." : "Loading records from SQL Database Engine...",
     signedAs: language === "ku" ? "چوونەژورەوە وەک" : "Active Operator"
   };
 
@@ -1613,12 +1613,12 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Realtime database status line */}
+            {/* Realtime SQL database status line */}
             <div className="hidden md:flex flex-col items-end text-right">
-              <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider font-sans">Firebase Sync</span>
-              <span className="text-[11px] text-green-600 font-bold flex items-center gap-1.5 justify-end">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping" />
-                Live Sync Active
+              <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider font-sans">SQL Database</span>
+              <span className="text-[11px] text-indigo-600 font-bold flex items-center gap-1.5 justify-end">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+                SQL Database Active
               </span>
             </div>
 
@@ -1630,7 +1630,7 @@ export default function App() {
               onClick={handleManualSync}
               disabled={isSyncing}
               className="flex items-center gap-1.5 px-3 py-1.5 lg:px-4 lg:py-2 bg-white/60 hover:bg-white text-slate-700 hover:text-slate-900 border border-slate-200 hover:border-slate-300 rounded-full text-xs font-bold transition shadow-2xs cursor-pointer disabled:opacity-60"
-              title={language === "ku" ? "نوێکردنەوەی داتاکان لە فایەربەیس" : "Sync Data from Cloud"}
+              title={language === "ku" ? "نوێکردنەوەی داتاکان لە داتابەیسی SQL" : "Sync Data from SQL Database"}
             >
               <RefreshCw className={`w-3.5 h-3.5 text-amber-500 ${isSyncing ? "animate-spin" : ""}`} />
               <span className="hidden sm:inline font-sans text-[11px]">

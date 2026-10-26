@@ -133,10 +133,8 @@ export async function apiRestoreBackup(fullData: any): Promise<{ success: boolea
   return res.json();
 }
 
-export async function apiPullFromFirestore(): Promise<{ success: boolean; stats: Record<string, number> }> {
-  const res = await fetch("/api/sync/pull-from-firestore", {
-    method: "POST",
-  });
-  if (!res.ok) throw new Error("Failed to pull from Firestore");
+export async function apiGetSqlStatus(): Promise<{ success: boolean; engine: string; tables: Record<string, number> }> {
+  const res = await fetch("/api/sql/status");
+  if (!res.ok) throw new Error("Failed to fetch SQL status");
   return res.json();
 }
