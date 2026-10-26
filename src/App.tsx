@@ -642,7 +642,11 @@ export default function App() {
       return updated;
     });
 
-    apiUpdateEmployee(id, deletionPayload).catch((e) => console.warn("Notice: Backend store delete warning:", e));
+    try {
+      await apiUpdateEmployee(id, deletionPayload);
+    } catch (e) {
+      console.warn("Notice: Backend store delete warning:", e);
+    }
 
     try {
       const docRef = doc(db, "employees", id);
@@ -664,8 +668,7 @@ export default function App() {
     setEmployees((prev) => {
       const updated = prev.map((e) => {
         if (e.id === id) {
-          const copy = { ...e, status: "active" as const };
-          delete copy.isDeleted;
+          const copy = { ...e, status: "active" as const, isDeleted: false };
           delete copy.deletedAt;
           delete copy.deletedBy;
           return copy;
@@ -676,7 +679,11 @@ export default function App() {
       return updated;
     });
 
-    apiUpdateEmployee(id, restorePayload).catch((e) => console.warn("Notice: Backend store restore warning:", e));
+    try {
+      await apiUpdateEmployee(id, restorePayload);
+    } catch (e) {
+      console.warn("Notice: Backend store restore warning:", e);
+    }
 
     try {
       const docRef = doc(db, "employees", id);

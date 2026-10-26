@@ -158,13 +158,39 @@ function seedSqlFromBackups() {
 export function sqlFetchAllData() {
   const db = getSqliteDb();
 
-  const empRows = db.prepare("SELECT data_json FROM employees ORDER BY created_at DESC;").all() as { data_json: string }[];
+  const empRows = db.prepare(`
+    SELECT data_json, is_deleted, status, deleted_at, deleted_by 
+    FROM employees 
+    ORDER BY created_at DESC;
+  `).all() as { data_json: string; is_deleted: number; status: string; deleted_at: string | null; deleted_by: string | null }[];
+
   const leaveRows = db.prepare("SELECT data_json FROM leave_requests ORDER BY created_at DESC;").all() as { data_json: string }[];
   const userRows = db.prepare("SELECT data_json FROM app_users;").all() as { data_json: string }[];
   const actRows = db.prepare("SELECT data_json FROM activities ORDER BY created_at DESC;").all() as { data_json: string }[];
   const giftRows = db.prepare("SELECT data_json FROM gifts ORDER BY updated_at DESC;").all() as { data_json: string }[];
   const msgRows = db.prepare("SELECT data_json FROM messages ORDER BY sent_at DESC;").all() as { data_json: string }[];
   const settingRows = db.prepare("SELECT data_json FROM system_settings;").all() as { data_json: string }[];
+
+  const safeParseEmp = (row: { data_json: string; is_deleted: number; status: string; deleted_at: string | null; deleted_by: string | null }) => {
+    try {
+      const obj = JSON.parse(row.data_json);
+      // Strictly enforce synchronization with SQLite columns
+      const isDel = row.is_deleted === 1;
+      obj.isDeleted = isDel;
+      if (isDel) {
+        obj.status = "deleted";
+        if (row.deleted_at) obj.deletedAt = row.deleted_at;
+        if (row.deleted_by) obj.deletedBy = row.deleted_by;
+      } else {
+        if (!obj.status || obj.status === "deleted") {
+          obj.status = "active";
+        }
+      }
+      return obj;
+    } catch (e) {
+      return null;
+    }
+  };
 
   const safeParse = (row: { data_json: string }) => {
     try {
@@ -175,7 +201,7 @@ export function sqlFetchAllData() {
   };
 
   return {
-    employees: empRows.map(safeParse).filter(Boolean),
+    employees: empRows.map(safeParseEmp).filter(Boolean),
     leave_requests: leaveRows.map(safeParse).filter(Boolean),
     app_users: userRows.map(safeParse).filter(Boolean),
     activities: actRows.map(safeParse).filter(Boolean),
@@ -189,8 +215,20 @@ export function sqlFetchAllData() {
 export function sqlInsertOrUpdateEmployee(emp: any) {
   const db = getSqliteDb();
   const id = emp.id;
-  const isDeleted = emp.isDeleted || emp.status === "deleted" ? 1 : 0;
+  // Strictly enforce integer 0 or 1 for SQLite parameter binding (SQLite throws on boolean)
+  const isDeletedNum: number = (emp.isDeleted === true || emp.isDeleted === 1 || emp.status === "deleted") ? 1 : 0;
+  const isDeletedBool: boolean = isDeletedNum === 1;
   const now = new Date().toISOString();
+  const statusStr: string = isDeletedBool ? "deleted" : (emp.status || "active");
+
+  const fullEmp = {
+    ...emp,
+    id,
+    isDeleted: isDeletedBool,
+    status: statusStr,
+    deletedAt: isDeletedBool ? (emp.deletedAt || now) : null,
+    deletedBy: isDeletedBool ? (emp.deletedBy || "admin") : null
+  };
 
   const stmt = db.prepare(`
     INSERT INTO employees (
@@ -220,24 +258,24 @@ export function sqlInsertOrUpdateEmployee(emp: any) {
 
   stmt.run(
     id,
-    emp.name || "",
-    emp.business || "",
-    emp.role || "",
-    emp.phone || "",
-    emp.birthDate || "",
-    emp.maritalStatus || "",
-    emp.marriageAnniversary || "",
-    emp.hireDate || "",
-    emp.status || "active",
-    isDeleted,
-    emp.deletedAt || null,
-    emp.deletedBy || null,
-    JSON.stringify(emp),
-    emp.createdAt || now,
+    fullEmp.name || "",
+    fullEmp.business || "",
+    fullEmp.role || "",
+    fullEmp.phone || "",
+    fullEmp.birthDate || "",
+    fullEmp.maritalStatus || "",
+    fullEmp.marriageAnniversary || "",
+    fullEmp.hireDate || "",
+    statusStr,
+    isDeletedNum, // Integer 0 or 1 only
+    fullEmp.deletedAt,
+    fullEmp.deletedBy,
+    JSON.stringify(fullEmp),
+    fullEmp.createdAt || now,
     now
   );
 
-  return emp;
+  return fullEmp;
 }
 
 export function sqlUpdateEmployeeFields(id: string, partial: any) {

@@ -137,7 +137,7 @@ export function updateEmployee(id: string, partial: any) {
   if (!memoryState.employees) memoryState.employees = [];
   const idx = memoryState.employees.findIndex((e) => e.id === id);
   if (idx >= 0) {
-    memoryState.employees[idx] = { ...memoryState.employees[idx], ...partial };
+    memoryState.employees[idx] = { ...memoryState.employees[idx], ...updatedInSql };
     persistStoreMirror();
     return memoryState.employees[idx];
   } else {
