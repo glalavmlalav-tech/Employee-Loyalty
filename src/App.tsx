@@ -492,16 +492,16 @@ export default function App() {
 
     loadDataFromServer();
 
-    // Check version every 10 seconds (0 Firestore cost, fast SQLite server memory)
+    // Check version gently every 3 minutes (zero bandwidth waste, only downloads if data actually modified)
     const interval = setInterval(async () => {
       try {
         if (isOperationInProgressRef.current) return;
         const remoteVersion = await checkDataVersion();
-        if (remoteVersion > currentVersionRef.current) {
+        if (remoteVersion > 0 && currentVersionRef.current > 0 && remoteVersion > currentVersionRef.current) {
           loadDataFromServer();
         }
       } catch (e) {}
-    }, 10000);
+    }, 180000);
 
     const onFocus = async () => {
       if (isOperationInProgressRef.current) return;
