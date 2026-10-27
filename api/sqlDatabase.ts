@@ -176,19 +176,17 @@ export function sqlFetchAllData() {
       const obj = JSON.parse(row.data_json);
       const cleanId = (row.id || obj.id || "").trim();
       obj.id = cleanId;
-      // Strictly enforce synchronization with SQLite columns and JSON properties
-      const isDel = row.is_deleted === 1 || row.status === "deleted" || obj.isDeleted === true || obj.isDeleted === 1 || obj.status === "deleted";
+      // SQLite column row.is_deleted is the single authoritative source of truth
+      const isDel = row.is_deleted === 1;
       obj.isDeleted = isDel;
       if (isDel) {
         obj.status = "deleted";
-        if (row.deleted_at) obj.deletedAt = row.deleted_at;
-        if (row.deleted_by) obj.deletedBy = row.deleted_by;
-        if (!obj.deletedAt) obj.deletedAt = new Date().toISOString();
-        if (!obj.deletedBy) obj.deletedBy = "admin";
+        obj.deletedAt = row.deleted_at || obj.deletedAt || new Date().toISOString();
+        obj.deletedBy = row.deleted_by || obj.deletedBy || "admin";
       } else {
-        if (!obj.status || obj.status === "deleted") {
-          obj.status = "active";
-        }
+        obj.status = (row.status && row.status !== "deleted") ? row.status : (obj.status && obj.status !== "deleted" ? obj.status : "active");
+        delete obj.deletedAt;
+        delete obj.deletedBy;
       }
       return obj;
     } catch (e) {
@@ -223,16 +221,22 @@ export function sqlInsertOrUpdateEmployee(emp: any) {
   const isDeletedNum: number = (emp.isDeleted === true || emp.isDeleted === 1 || emp.status === "deleted") ? 1 : 0;
   const isDeletedBool: boolean = isDeletedNum === 1;
   const now = new Date().toISOString();
-  const statusStr: string = isDeletedBool ? "deleted" : (emp.status || "active");
+  const statusStr: string = isDeletedBool ? "deleted" : ((emp.status && emp.status !== "deleted") ? emp.status : "active");
 
-  const fullEmp = {
+  const fullEmp: any = {
     ...emp,
     id,
     isDeleted: isDeletedBool,
-    status: statusStr,
-    deletedAt: isDeletedBool ? (emp.deletedAt || now) : null,
-    deletedBy: isDeletedBool ? (emp.deletedBy || "admin") : null
+    status: statusStr
   };
+
+  if (isDeletedBool) {
+    fullEmp.deletedAt = emp.deletedAt || now;
+    fullEmp.deletedBy = emp.deletedBy || "admin";
+  } else {
+    delete fullEmp.deletedAt;
+    delete fullEmp.deletedBy;
+  }
 
   const stmt = db.prepare(`
     INSERT INTO employees (
@@ -272,8 +276,8 @@ export function sqlInsertOrUpdateEmployee(emp: any) {
     fullEmp.hireDate || "",
     statusStr,
     isDeletedNum, // Integer 0 or 1 only
-    fullEmp.deletedAt,
-    fullEmp.deletedBy,
+    fullEmp.deletedAt || null,
+    fullEmp.deletedBy || null,
     JSON.stringify(fullEmp),
     fullEmp.createdAt || now,
     now
@@ -293,6 +297,17 @@ export function sqlUpdateEmployeeFields(id: string, partial: any) {
     } catch (e) {}
   }
   const merged = { ...fullEmp, ...partial, id: cleanId };
+  if (partial.isDeleted === false || (partial.status && partial.status !== "deleted")) {
+    merged.isDeleted = false;
+    merged.status = partial.status || "active";
+    delete merged.deletedAt;
+    delete merged.deletedBy;
+  } else if (partial.isDeleted === true || partial.status === "deleted") {
+    merged.isDeleted = true;
+    merged.status = "deleted";
+    merged.deletedAt = partial.deletedAt || new Date().toISOString();
+    merged.deletedBy = partial.deletedBy || "admin";
+  }
   return sqlInsertOrUpdateEmployee(merged);
 }
 
@@ -360,6 +375,12 @@ export function sqlInsertOrUpdateAppUser(user: any) {
   return user;
 }
 
+export function sqlDeleteAppUser(id: string) {
+  const db = getSqliteDb();
+  db.prepare("DELETE FROM app_users WHERE id = ? OR username = ?;").run(id, id);
+  return true;
+}
+
 // Activities
 export function sqlInsertOrUpdateActivity(act: any) {
   const db = getSqliteDb();
@@ -377,6 +398,12 @@ export function sqlInsertOrUpdateActivity(act: any) {
 
   stmt.run(id, business, JSON.stringify(act), createdAt);
   return act;
+}
+
+export function sqlDeleteActivity(id: string) {
+  const db = getSqliteDb();
+  db.prepare("DELETE FROM activities WHERE id = ?;").run(id);
+  return true;
 }
 
 // Gifts

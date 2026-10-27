@@ -28,7 +28,9 @@ import {
   updateLeaveRequest,
   deleteLeaveRequest,
   saveAppUser,
+  deleteAppUser,
   saveActivity,
+  deleteActivity,
   saveGift,
   saveMessage,
   saveSettings,
@@ -278,11 +280,29 @@ app.post("/api/app-users", (req, res) => {
   }
 });
 
+app.delete("/api/app-users/:id", (req, res) => {
+  try {
+    deleteAppUser(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Activities, Gifts, Messages, Settings
 app.post("/api/activities", (req, res) => {
   try {
     const act = saveActivity(req.body);
     res.json(act);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/activities/:id", (req, res) => {
+  try {
+    deleteActivity(req.params.id);
+    res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

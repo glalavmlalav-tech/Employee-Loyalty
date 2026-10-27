@@ -1,15 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { 
-  collection, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  onSnapshot, 
   doc, 
-  setDoc,
-  getDocs,
-  getDoc,
-  deleteField
+  getDoc 
 } from "firebase/firestore";
 import { 
   signInWithPopup, 
@@ -73,6 +65,8 @@ import {
   apiSaveGift, 
   apiSaveMessage, 
   apiSaveAppUser,
+  apiDeleteAppUser,
+  apiDeleteActivity,
   apiRestoreBackup,
   apiGetSqlStatus
 } from "./utils/apiClient";
@@ -480,59 +474,7 @@ export default function App() {
         return;
       }
     } catch (err) {
-      console.warn("Notice: /api/data not available on this host (e.g. Vercel static deployment), activating direct Firestore fallback:", err);
-    }
-
-    // Direct Firestore fallback for Vercel, static deployments, and edge environments
-    try {
-      const [empSnap, leaveSnap, userSnap, actSnap, giftSnap, msgSnap] = await Promise.all([
-        getDocs(collection(db, "employees")),
-        getDocs(collection(db, "leave_requests")),
-        getDocs(collection(db, "app_users")),
-        getDocs(collection(db, "activities")),
-        getDocs(collection(db, "gifts")),
-        getDocs(collection(db, "messages")),
-      ]);
-
-      if (!empSnap.empty) {
-        const rawEmps = empSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Employee));
-        setEmployees(rawEmps);
-        persistEmployeesLocally(rawEmps);
-      }
-      if (!leaveSnap.empty) {
-        const fetchedLeaves = leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LeaveRequest));
-        const sorted = fetchedLeaves.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
-        setLeaveRequests(sorted);
-        safeLocalStorageSetItem("cache_leave_requests", JSON.stringify(sorted));
-      }
-      if (!userSnap.empty) {
-        const fetchedUsers = userSnap.docs.map((d) => ({ id: d.id, ...d.data() } as AppUser));
-        setAppUsers(fetchedUsers);
-        safeLocalStorageSetItem("cache_app_users", JSON.stringify(fetchedUsers));
-        setAppUsersLoaded(true);
-      }
-      if (!actSnap.empty) {
-        const fetchedActs = actSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LoyaltyActivity));
-        const sorted = fetchedActs.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-        setActivities(sorted);
-        safeLocalStorageSetItem("cache_activities", JSON.stringify(sorted));
-      }
-      if (!giftSnap.empty) {
-        const fetchedGifts = giftSnap.docs.map((d) => ({ id: d.id, ...d.data() } as GiftLog));
-        const sorted = fetchedGifts.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
-        setGiftLogs(sorted);
-        safeLocalStorageSetItem("cache_gifts", JSON.stringify(sorted));
-      }
-      if (!msgSnap.empty) {
-        const fetchedMsgs = msgSnap.docs.map((d) => ({ id: d.id, ...d.data() } as SentMessageLog));
-        const sorted = fetchedMsgs.sort((a, b) => (b.sentAt || "").localeCompare(a.sentAt || ""));
-        setMessageLogs(sorted);
-        safeLocalStorageSetItem("cache_messages", JSON.stringify(sorted));
-      }
-      setDbLoading(false);
-      setDbError(null);
-    } catch (fsErr) {
-      console.warn("Notice: Firestore fallback sync completed or handled cached mode:", fsErr);
+      console.warn("Notice: /api/data sync handled safely:", err);
       setDbLoading(false);
     }
   }, []);
@@ -544,13 +486,13 @@ export default function App() {
     // Rehydrate full high-res images and documents from IndexedDB without network delay
     idbGet<Employee[]>("full_employees").then((full) => {
       if (Array.isArray(full) && full.length > 0) {
-        setEmployees(full);
+        setEmployees((current) => (current.length === 0 ? full : current));
       }
     }).catch(() => {});
 
     loadDataFromServer();
 
-    // Check version every 10 seconds (0 Firestore read cost, served directly by Express memory)
+    // Check version every 10 seconds (0 Firestore cost, fast SQLite server memory)
     const interval = setInterval(async () => {
       try {
         if (isOperationInProgressRef.current) return;
@@ -561,9 +503,14 @@ export default function App() {
       } catch (e) {}
     }, 10000);
 
-    const onFocus = () => {
+    const onFocus = async () => {
       if (isOperationInProgressRef.current) return;
-      loadDataFromServer();
+      try {
+        const remoteVersion = await checkDataVersion();
+        if (remoteVersion > currentVersionRef.current) {
+          loadDataFromServer();
+        }
+      } catch (e) {}
     };
     window.addEventListener("focus", onFocus);
 
@@ -589,7 +536,7 @@ export default function App() {
     setAlerts(currentAlerts);
   }, [employees, systemDate]);
 
-  // Zero-read Persistent Operations (saves to local server storage and syncs to Firestore in background)
+  // Zero-read Persistent Operations (saves directly to persistent SQL backend)
   const registerEmployeeInFirestore = async (empData: Omit<Employee, "id">) => {
     const tempId = `emp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     const newEmp: Employee = {
@@ -605,15 +552,13 @@ export default function App() {
       return updated;
     });
 
-    // 1. Save to persistent zero-read backend store
-    apiSaveEmployee(newEmp).catch((e) => console.warn("Notice: Backend store save warning:", e));
-
-    // 2. Direct Firestore fallback attempt
     try {
-      const docRef = doc(db, "employees", tempId);
-      await setDoc(docRef, newEmp);
+      const res: any = await apiSaveEmployee(newEmp);
+      if (res && res.version) {
+        currentVersionRef.current = res.version;
+      }
     } catch (e) {
-      console.warn("Notice: Direct Firestore write handled via backend:", e);
+      console.warn("Notice: Backend store save warning:", e);
     }
   };
 
@@ -625,15 +570,13 @@ export default function App() {
       return updated;
     });
 
-    // 1. Save to persistent zero-read backend store
-    apiUpdateEmployee(id, empData).catch((e) => console.warn("Notice: Backend store update warning:", e));
-
-    // 2. Direct Firestore fallback
     try {
-      const docRef = doc(db, "employees", id);
-      await updateDoc(docRef, empData);
+      const res: any = await apiUpdateEmployee(id, empData);
+      if (res && res.version) {
+        currentVersionRef.current = res.version;
+      }
     } catch (e) {
-      console.warn("Notice: Direct Firestore update handled via backend:", e);
+      console.warn("Notice: Backend store update warning:", e);
     }
   };
 
@@ -660,7 +603,7 @@ export default function App() {
     // 2. Mark operation in progress to prevent background reloads from racing
     isOperationInProgressRef.current = true;
 
-    // 3. Save to SQL backend store
+    // 3. Save directly to SQL backend store
     try {
       const result: any = await apiUpdateEmployee(cleanId, deletionPayload);
       if (result && result.version) {
@@ -668,14 +611,6 @@ export default function App() {
       }
     } catch (e) {
       console.warn("Notice: Backend store delete warning:", e);
-    }
-
-    // 4. Mirror to cloud Firestore
-    try {
-      const docRef = doc(db, "employees", cleanId);
-      await setDoc(docRef, deletionPayload, { merge: true });
-    } catch (e) {
-      console.warn("Notice: Direct Firestore delete handled via backend:", e);
     } finally {
       setTimeout(() => {
         isOperationInProgressRef.current = false;
@@ -719,19 +654,6 @@ export default function App() {
       }
     } catch (e) {
       console.warn("Notice: Backend store restore warning:", e);
-    }
-
-    // 3. Mirror to cloud Firestore
-    try {
-      const docRef = doc(db, "employees", cleanId);
-      await updateDoc(docRef, {
-        isDeleted: deleteField(),
-        deletedAt: deleteField(),
-        deletedBy: deleteField(),
-        status: "active"
-      });
-    } catch (e) {
-      console.warn("Notice: Direct Firestore restore handled via backend:", e);
     } finally {
       setTimeout(() => {
         isOperationInProgressRef.current = false;
@@ -751,13 +673,6 @@ export default function App() {
     });
 
     apiDeleteEmployee(cleanId).catch((e) => console.warn("Notice: Backend store perm-delete warning:", e));
-
-    try {
-      const docRef = doc(db, "employees", cleanId);
-      await deleteDoc(docRef);
-    } catch (e) {
-      console.warn("Notice: Direct Firestore perm-delete handled via backend:", e);
-    }
   };
 
   const addActivityInFirestore = async (actData: Omit<LoyaltyActivity, "id" | "createdAt">) => {
@@ -775,12 +690,6 @@ export default function App() {
     });
 
     apiSaveActivity(newAct).catch((e) => console.warn("Notice: Backend store activity warning:", e));
-
-    try {
-      await setDoc(doc(db, "activities", tempId), newAct);
-    } catch (e) {
-      console.warn("Notice: Direct Firestore activity save handled via backend:", e);
-    }
   };
 
   const updateActivityStatusInFirestore = async (id: string, status: LoyaltyActivity["status"]) => {
@@ -792,13 +701,6 @@ export default function App() {
     });
 
     apiSaveActivity({ id, status } as any).catch((e) => console.warn("Notice: Backend store activity update warning:", e));
-
-    try {
-      const docRef = doc(db, "activities", id);
-      await updateDoc(docRef, { status });
-    } catch (e) {
-      console.warn("Notice: Direct Firestore activity update handled via backend:", e);
-    }
   };
 
   const deleteActivityFromFirestore = async (id: string) => {
@@ -809,12 +711,7 @@ export default function App() {
       return updated;
     });
 
-    try {
-      const docRef = doc(db, "activities", id);
-      await deleteDoc(docRef);
-    } catch (e) {
-      console.warn("Notice: Direct Firestore activity delete handled via backend:", e);
-    }
+    apiDeleteActivity(id).catch((e) => console.warn("Notice: Backend store activity delete warning:", e));
   };
 
   const addGiftLog = async (giftData: Omit<GiftLog, "id" | "updatedAt">) => {
@@ -832,12 +729,6 @@ export default function App() {
     });
 
     apiSaveGift(newGift).catch((e) => console.warn("Notice: Backend store gift warning:", e));
-
-    try {
-      await setDoc(doc(db, "gifts", tempId), newGift);
-    } catch (e) {
-      console.warn("Notice: Direct Firestore gift save handled via backend:", e);
-    }
   };
 
   const addMessageLog = async (msgData: Omit<SentMessageLog, "id" | "sentAt">) => {
@@ -855,12 +746,6 @@ export default function App() {
     });
 
     apiSaveMessage(newMsg).catch((e) => console.warn("Notice: Backend store message warning:", e));
-
-    try {
-      await setDoc(doc(db, "messages", tempId), newMsg);
-    } catch (e) {
-      console.warn("Notice: Direct Firestore message save handled via backend:", e);
-    }
   };
 
   const updateGiftStatus = async (giftId: string, status: GiftLog["status"]) => {
@@ -873,13 +758,6 @@ export default function App() {
     });
 
     apiSaveGift({ id: giftId, status, updatedAt: updatedTime } as any).catch((e) => console.warn("Notice: Backend store gift update warning:", e));
-
-    try {
-      const docRef = doc(db, "gifts", giftId);
-      await updateDoc(docRef, { status, updatedAt: updatedTime });
-    } catch (e) {
-      console.warn("Notice: Direct Firestore gift update handled via backend:", e);
-    }
   };
 
   const addLeaveRequestInFirestore = async (leaveData: Omit<LeaveRequest, "id">) => {
@@ -899,16 +777,8 @@ export default function App() {
       return updated;
     });
 
-    // 1. Save to persistent backend store
+    // Save directly to SQL backend store
     apiSaveLeave(newLeave).catch((e) => console.warn("Notice: Backend store leave warning:", e));
-
-    // 2. Direct Firestore fallback
-    try {
-      const docRef = doc(db, "leave_requests", leaveId);
-      await setDoc(docRef, sanitizedData);
-    } catch (e) {
-      console.warn("Notice: Direct Firestore leave write handled via backend:", e);
-    }
   };
 
   const deleteLeaveRequestFromFirestore = async (id: string) => {
@@ -920,12 +790,6 @@ export default function App() {
     });
 
     apiDeleteLeave(id).catch((e) => console.warn("Notice: Backend store leave delete warning:", e));
-
-    try {
-      await deleteDoc(doc(db, "leave_requests", id));
-    } catch (e) {
-      console.warn("Notice: Direct Firestore leave delete handled via backend:", e);
-    }
   };
 
   // Export all local database cache data into a backup JSON file
@@ -1126,9 +990,9 @@ export default function App() {
         safeLocalStorageSetItem("cache_app_users", JSON.stringify(updated));
         return updated;
       });
-      await setDoc(doc(db, "app_users", docId), newUser);
+      await apiSaveAppUser(newUser);
     } catch (e) {
-      console.warn("Failed to write to cloud:", e);
+      console.warn("Failed to write user to backend:", e);
       alert(language === "ku" ? "کێشەیەک ڕوویدا لە کاتی پاشەکەوتکردنی بەکارهێنەر" : "Error saving user credentials");
     }
   };
@@ -1140,9 +1004,9 @@ export default function App() {
         safeLocalStorageSetItem("cache_app_users", JSON.stringify(updated));
         return updated;
       });
-      await deleteDoc(doc(db, "app_users", docId));
+      await apiDeleteAppUser(docId);
     } catch (e) {
-      console.warn("Failed to delete from cloud:", e);
+      console.warn("Failed to delete user from backend:", e);
       alert(language === "ku" ? "کێشەیەک ڕوویدا لە کاتی سڕینەوەی بەکارهێنەر" : "Error deleting user");
     }
   };

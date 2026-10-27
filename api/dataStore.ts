@@ -10,7 +10,9 @@ import {
   sqlUpdateLeaveFields,
   sqlDeleteLeave,
   sqlInsertOrUpdateAppUser,
+  sqlDeleteAppUser,
   sqlInsertOrUpdateActivity,
+  sqlDeleteActivity,
   sqlInsertOrUpdateGift,
   sqlInsertOrUpdateMessage,
   sqlInsertOrUpdateSettings,
@@ -138,9 +140,9 @@ export function updateEmployee(id: string, partial: any) {
   if (!memoryState.employees) memoryState.employees = [];
   const idx = memoryState.employees.findIndex((e) => (e.id || "").trim() === cleanId);
   if (idx >= 0) {
-    memoryState.employees[idx] = { ...memoryState.employees[idx], ...updatedInSql };
+    memoryState.employees[idx] = updatedInSql;
     persistStoreMirror();
-    return { ...memoryState.employees[idx], version: dataVersion };
+    return { ...updatedInSql, version: dataVersion };
   } else {
     memoryState.employees.push(updatedInSql);
     persistStoreMirror();
@@ -222,6 +224,14 @@ export function saveAppUser(user: any) {
   return user;
 }
 
+export function deleteAppUser(id: string) {
+  sqlDeleteAppUser(id);
+  if (!memoryState.app_users) memoryState.app_users = [];
+  memoryState.app_users = memoryState.app_users.filter((u) => u.id !== id && u.username !== id);
+  persistStoreMirror();
+  return true;
+}
+
 // Activities, Gifts, Messages, Settings via SQL
 export function saveActivity(act: any) {
   sqlInsertOrUpdateActivity(act);
@@ -232,6 +242,14 @@ export function saveActivity(act: any) {
   else memoryState.activities.push(act);
   persistStoreMirror();
   return act;
+}
+
+export function deleteActivity(id: string) {
+  sqlDeleteActivity(id);
+  if (!memoryState.activities) memoryState.activities = [];
+  memoryState.activities = memoryState.activities.filter((a) => a.id !== id);
+  persistStoreMirror();
+  return true;
 }
 
 export function saveGift(gift: any) {

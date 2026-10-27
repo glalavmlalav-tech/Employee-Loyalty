@@ -97,6 +97,14 @@ export async function apiSaveAppUser(user: AppUser): Promise<AppUser> {
   return res.json();
 }
 
+export async function apiDeleteAppUser(id: string): Promise<boolean> {
+  const res = await fetch(`/api/app-users/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete app user");
+  return true;
+}
+
 export async function apiSaveActivity(act: LoyaltyActivity): Promise<LoyaltyActivity> {
   const res = await fetch("/api/activities", {
     method: "POST",
@@ -105,6 +113,14 @@ export async function apiSaveActivity(act: LoyaltyActivity): Promise<LoyaltyActi
   });
   if (!res.ok) throw new Error("Failed to save activity");
   return res.json();
+}
+
+export async function apiDeleteActivity(id: string): Promise<boolean> {
+  const res = await fetch(`/api/activities/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error("Failed to delete activity");
+  return true;
 }
 
 export async function apiSaveGift(gift: GiftLog): Promise<GiftLog> {
