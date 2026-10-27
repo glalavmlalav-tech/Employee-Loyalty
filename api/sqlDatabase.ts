@@ -159,10 +159,10 @@ export function sqlFetchAllData() {
   const db = getSqliteDb();
 
   const empRows = db.prepare(`
-    SELECT data_json, is_deleted, status, deleted_at, deleted_by 
+    SELECT id, data_json, is_deleted, status, deleted_at, deleted_by 
     FROM employees 
     ORDER BY created_at DESC;
-  `).all() as { data_json: string; is_deleted: number; status: string; deleted_at: string | null; deleted_by: string | null }[];
+  `).all() as { id: string; data_json: string; is_deleted: number; status: string; deleted_at: string | null; deleted_by: string | null }[];
 
   const leaveRows = db.prepare("SELECT data_json FROM leave_requests ORDER BY created_at DESC;").all() as { data_json: string }[];
   const userRows = db.prepare("SELECT data_json FROM app_users;").all() as { data_json: string }[];
@@ -171,9 +171,11 @@ export function sqlFetchAllData() {
   const msgRows = db.prepare("SELECT data_json FROM messages ORDER BY sent_at DESC;").all() as { data_json: string }[];
   const settingRows = db.prepare("SELECT data_json FROM system_settings;").all() as { data_json: string }[];
 
-  const safeParseEmp = (row: { data_json: string; is_deleted: number; status: string; deleted_at: string | null; deleted_by: string | null }) => {
+  const safeParseEmp = (row: { id: string; data_json: string; is_deleted: number; status: string; deleted_at: string | null; deleted_by: string | null }) => {
     try {
       const obj = JSON.parse(row.data_json);
+      const cleanId = (row.id || obj.id || "").trim();
+      obj.id = cleanId;
       // Strictly enforce synchronization with SQLite columns and JSON properties
       const isDel = row.is_deleted === 1 || row.status === "deleted" || obj.isDeleted === true || obj.isDeleted === 1 || obj.status === "deleted";
       obj.isDeleted = isDel;
@@ -282,14 +284,15 @@ export function sqlInsertOrUpdateEmployee(emp: any) {
 
 export function sqlUpdateEmployeeFields(id: string, partial: any) {
   const db = getSqliteDb();
-  const existingRow = db.prepare("SELECT data_json FROM employees WHERE id = ?;").get(id) as { data_json: string } | undefined;
+  const cleanId = (id || "").trim();
+  const existingRow = db.prepare("SELECT data_json FROM employees WHERE id = ? OR id = ?;").get(cleanId, id) as { data_json: string } | undefined;
   let fullEmp: any = {};
   if (existingRow) {
     try {
       fullEmp = JSON.parse(existingRow.data_json);
     } catch (e) {}
   }
-  const merged = { ...fullEmp, ...partial, id };
+  const merged = { ...fullEmp, ...partial, id: cleanId };
   return sqlInsertOrUpdateEmployee(merged);
 }
 

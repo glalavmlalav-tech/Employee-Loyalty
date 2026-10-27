@@ -982,7 +982,9 @@
       "emergencyContactRelation": "باوک - عدنان",
       "maritalStatus": "married",
       "ethnicity": "کورد",
-      "isDeleted": false
+      "isDeleted": false,
+      "deletedAt": null,
+      "deletedBy": null
     },
     {
       "id": "pPrBiY1w5e7VxV24Izd7",
@@ -1591,8 +1593,10 @@
       "marriageAnniversary": "2013-08-30",
       "emergencyContactRelation": "خێزانی",
       "citizenship": "ئێرانی",
-      "status": "active",
-      "isDeleted": false
+      "status": "deleted",
+      "isDeleted": true,
+      "deletedAt": "2026-10-27T08:32:48.580Z",
+      "deletedBy": "مهندس بیلال"
     },
     {
       "id": "Ia105iXa1LZqrpwfB7u5",

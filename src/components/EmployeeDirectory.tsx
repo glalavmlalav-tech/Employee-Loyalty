@@ -519,9 +519,21 @@ export default function EmployeeDirectory({
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const [deletingEmpId, setDeletingEmpId] = useState<string | null>(null);
+
+  const handleDelete = async (id: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (deletingEmpId) return;
     if (confirm(t.confirmDelete)) {
-      await onDeleteEmployee(id);
+      setDeletingEmpId(id);
+      try {
+        await onDeleteEmployee(id);
+      } finally {
+        setDeletingEmpId(null);
+      }
     }
   };
 
@@ -1872,11 +1884,18 @@ export default function EmployeeDirectory({
                     )}
                     {userSession?.role !== "observer" && (
                       <button
-                        onClick={() => handleDelete(emp.id)}
-                        className="px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-slate-200 hover:border-rose-100 rounded-xl font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm cursor-pointer"
+                        onClick={(e) => handleDelete(emp.id, e)}
+                        disabled={deletingEmpId === emp.id}
+                        className={`px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-slate-200 hover:border-rose-100 rounded-xl font-bold flex items-center gap-1.5 transition active:scale-95 shadow-sm cursor-pointer ${
+                          deletingEmpId === emp.id ? "opacity-60 cursor-not-allowed" : ""
+                        }`}
                         title={language === "ku" ? "سڕینەوە و ناردن بۆ سەبەتەی خۆڵ" : "Delete & Send to Trash"}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        {deletingEmpId === emp.id ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-rose-500" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
                         {language === "ku" ? "سڕینەوە" : "Delete"}
                       </button>
                     )}

@@ -130,20 +130,21 @@ export function saveEmployee(employee: any) {
 }
 
 export function updateEmployee(id: string, partial: any) {
+  const cleanId = (id || "").trim();
   // 1. Save to SQL
-  const updatedInSql = sqlUpdateEmployeeFields(id, partial);
+  const updatedInSql = sqlUpdateEmployeeFields(cleanId, partial);
 
   // 2. Update memory state
   if (!memoryState.employees) memoryState.employees = [];
-  const idx = memoryState.employees.findIndex((e) => e.id === id);
+  const idx = memoryState.employees.findIndex((e) => (e.id || "").trim() === cleanId);
   if (idx >= 0) {
     memoryState.employees[idx] = { ...memoryState.employees[idx], ...updatedInSql };
     persistStoreMirror();
-    return memoryState.employees[idx];
+    return { ...memoryState.employees[idx], version: dataVersion };
   } else {
     memoryState.employees.push(updatedInSql);
     persistStoreMirror();
-    return updatedInSql;
+    return { ...updatedInSql, version: dataVersion };
   }
 }
 
