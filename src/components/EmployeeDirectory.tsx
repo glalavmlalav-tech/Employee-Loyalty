@@ -38,7 +38,7 @@ import {
   getNewEmployeeDaysRemaining 
 } from "../utils";
 import ImageCropper from "./ImageCropper";
-import { compressImageBase64 } from "../utils/imageCompression";
+import { compressImageBase64, compressImageFile } from "../utils/imageCompression";
 import LeaveRequestModal from "./LeaveRequestModal";
 import EmployeeLeaveArchiveModal from "./EmployeeLeaveArchiveModal";
 
@@ -453,7 +453,7 @@ export default function EmployeeDirectory({
     }
   };
 
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     const videoElement = document.getElementById("camera-stream") as HTMLVideoElement;
     if (videoElement) {
       const canvas = document.createElement("canvas");
@@ -462,8 +462,9 @@ export default function EmployeeDirectory({
       const ctx = canvas.getContext("2d");
       if (ctx) {
         ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.9); // high quality raw
-        setImageToCrop(dataUrl);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        const compressed = await compressImageBase64(dataUrl, 500, 500, 0.7);
+        setImageToCrop(compressed);
         stopCamera();
       }
     }
@@ -2007,14 +2008,12 @@ export default function EmployeeDirectory({
                             type="file" 
                             accept="image/*" 
                             className="hidden" 
-                            onChange={(e) => {
+                            onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (file) {
-                                const reader = new FileReader();
-                                reader.onloadend = () => {
-                                  setImageToCrop(reader.result as string);
-                                };
-                                reader.readAsDataURL(file);
+                                const compressed = await compressImageFile(file, 600, 600, 0.7);
+                                setImageToCrop(compressed);
+                                e.target.value = "";
                               }
                             }}
                           />
@@ -2392,15 +2391,12 @@ export default function EmployeeDirectory({
                                 type="file"
                                 accept="image/*"
                                 className="hidden"
-                                onChange={(e) => {
+                                onChange={async (e) => {
                                   const file = e.target.files?.[0];
                                   if (file) {
-                                    const reader = new FileReader();
-                                    reader.onloadend = async () => {
-                                      const compressed = await compressImageBase64(reader.result as string, 800, 800, 0.6);
-                                      setFormData((prev) => ({ ...prev, passportOrNationalCardUrl: compressed }));
-                                    };
-                                    reader.readAsDataURL(file);
+                                    const compressed = await compressImageFile(file, 800, 800, 0.6, "image/webp");
+                                    setFormData((prev) => ({ ...prev, passportOrNationalCardUrl: compressed }));
+                                    e.target.value = "";
                                   }
                                 }}
                               />
@@ -2523,15 +2519,12 @@ export default function EmployeeDirectory({
                                 type="file"
                                 accept="image/*"
                                 className="hidden"
-                                onChange={(e) => {
+                                onChange={async (e) => {
                                   const file = e.target.files?.[0];
                                   if (file) {
-                                    const reader = new FileReader();
-                                    reader.onloadend = async () => {
-                                      const compressed = await compressImageBase64(reader.result as string, 800, 800, 0.6);
-                                      setFormData((prev) => ({ ...prev, iqamaUrl: compressed }));
-                                    };
-                                    reader.readAsDataURL(file);
+                                    const compressed = await compressImageFile(file, 800, 800, 0.6, "image/webp");
+                                    setFormData((prev) => ({ ...prev, iqamaUrl: compressed }));
+                                    e.target.value = "";
                                   }
                                 }}
                               />

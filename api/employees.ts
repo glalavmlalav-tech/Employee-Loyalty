@@ -1,7 +1,8 @@
 import fs from "fs";
 import path from "path";
+import { compressEmployeeRecord } from "./serverImageCompression.ts";
 
-export default function handler(req: any, res: any) {
+export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -32,7 +33,7 @@ export default function handler(req: any, res: any) {
     }
 
     if (req.method === "POST") {
-      const newEmp = req.body;
+      const newEmp = await compressEmployeeRecord(req.body);
       const idx = store.employees.findIndex((e: any) => e.id === newEmp.id);
       if (idx >= 0) {
         store.employees[idx] = { ...store.employees[idx], ...newEmp };
@@ -44,7 +45,7 @@ export default function handler(req: any, res: any) {
     }
 
     if (req.method === "PUT") {
-      const partial = req.body;
+      const partial = await compressEmployeeRecord(req.body);
       const id = targetId || partial.id;
       const idx = store.employees.findIndex((e: any) => e.id === id);
       if (idx >= 0) {

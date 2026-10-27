@@ -213,18 +213,18 @@ app.get("/api/data/version", (req, res) => {
 });
 
 // Employee Endpoints
-app.post("/api/employees", (req, res) => {
+app.post("/api/employees", async (req, res) => {
   try {
-    const emp = saveEmployee(req.body);
+    const emp = await saveEmployee(req.body);
     res.json(emp);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.put("/api/employees/:id", (req, res) => {
+app.put("/api/employees/:id", async (req, res) => {
   try {
-    const emp = updateEmployee(req.params.id, req.body);
+    const emp = await updateEmployee(req.params.id, req.body);
     if (!emp) return res.status(404).json({ error: "Employee not found" });
     res.json(emp);
   } catch (err: any) {

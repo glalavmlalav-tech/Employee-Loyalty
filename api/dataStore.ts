@@ -20,6 +20,7 @@ import {
   getSqlDiagnostics,
   sqlInspectTable
 } from "./sqlDatabase.ts";
+import { compressEmployeeRecord } from "./serverImageCompression.ts";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
@@ -115,26 +116,32 @@ export function getEmployees() {
   return memoryState.employees || [];
 }
 
-export function saveEmployee(employee: any) {
+export async function saveEmployee(employee: any) {
+  // Pre-compress images if present
+  const compressedEmployee = await compressEmployeeRecord(employee);
+
   // 1. Save to SQL
-  sqlInsertOrUpdateEmployee(employee);
+  sqlInsertOrUpdateEmployee(compressedEmployee);
 
   // 2. Update memory state
   if (!memoryState.employees) memoryState.employees = [];
-  const idx = memoryState.employees.findIndex((e) => e.id === employee.id);
+  const idx = memoryState.employees.findIndex((e) => e.id === compressedEmployee.id);
   if (idx >= 0) {
-    memoryState.employees[idx] = { ...memoryState.employees[idx], ...employee };
+    memoryState.employees[idx] = { ...memoryState.employees[idx], ...compressedEmployee };
   } else {
-    memoryState.employees.push(employee);
+    memoryState.employees.push(compressedEmployee);
   }
   persistStoreMirror();
-  return employee;
+  return compressedEmployee;
 }
 
-export function updateEmployee(id: string, partial: any) {
+export async function updateEmployee(id: string, partial: any) {
   const cleanId = (id || "").trim();
+  // Pre-compress partial images if present
+  const compressedPartial = await compressEmployeeRecord(partial);
+
   // 1. Save to SQL
-  const updatedInSql = sqlUpdateEmployeeFields(cleanId, partial);
+  const updatedInSql = sqlUpdateEmployeeFields(cleanId, compressedPartial);
 
   // 2. Update memory state
   if (!memoryState.employees) memoryState.employees = [];
