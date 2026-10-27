@@ -216,7 +216,7 @@ export function sqlFetchAllData() {
 // Employees
 export function sqlInsertOrUpdateEmployee(emp: any) {
   const db = getSqliteDb();
-  const id = emp.id;
+  const id = emp.id || ("emp-" + Date.now() + "-" + Math.random().toString(36).substr(2, 5));
   // Strictly enforce integer 0 or 1 for SQLite parameter binding (SQLite throws on boolean)
   const isDeletedNum: number = (emp.isDeleted === true || emp.isDeleted === 1 || emp.status === "deleted") ? 1 : 0;
   const isDeletedBool: boolean = isDeletedNum === 1;

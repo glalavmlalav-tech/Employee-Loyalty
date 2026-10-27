@@ -434,14 +434,21 @@ export default function App() {
 
   // Zero-read Server Data Loader (loads all 71 employees, leaves, users, etc. in 1 call at 0 Firestore reads)
   const currentVersionRef = React.useRef<number>(0);
+  const recentlyDeletedIdsRef = React.useRef<Set<string>>(new Set());
 
   const loadDataFromServer = useCallback(async () => {
     try {
       const data = await fetchBootstrapData();
       if (data) {
         if (Array.isArray(data.employees)) {
-          setEmployees(data.employees);
-          persistEmployeesLocally(data.employees);
+          const sanitizedEmployees = data.employees.map((emp) => {
+            if (recentlyDeletedIdsRef.current.has(emp.id)) {
+              return { ...emp, isDeleted: true, status: "deleted" as const };
+            }
+            return emp;
+          });
+          setEmployees(sanitizedEmployees);
+          persistEmployeesLocally(sanitizedEmployees);
         }
         if (Array.isArray(data.leave_requests)) {
           const sorted = data.leave_requests.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
@@ -632,6 +639,7 @@ export default function App() {
   };
 
   const deleteEmployeeFromFirestore = async (id: string) => {
+    recentlyDeletedIdsRef.current.add(id);
     const senderName = userSession?.name || sandboxGuest || "Admin";
     const deletionPayload: Partial<Employee> = {
       isDeleted: true,
@@ -662,6 +670,7 @@ export default function App() {
   };
 
   const restoreEmployeeFromTrash = async (id: string) => {
+    recentlyDeletedIdsRef.current.delete(id);
     const restorePayload: Partial<Employee> = {
       isDeleted: false,
       status: "active",

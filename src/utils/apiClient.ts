@@ -13,7 +13,9 @@ export interface BootstrapResponse {
 }
 
 export async function fetchBootstrapData(): Promise<BootstrapResponse> {
-  const res = await fetch("/api/data");
+  const res = await fetch(`/api/data?t=${Date.now()}`, {
+    headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" }
+  });
   if (!res.ok) {
     throw new Error(`Failed to fetch initial data: ${res.statusText}`);
   }
@@ -21,7 +23,9 @@ export async function fetchBootstrapData(): Promise<BootstrapResponse> {
 }
 
 export async function checkDataVersion(): Promise<number> {
-  const res = await fetch("/api/data/version");
+  const res = await fetch(`/api/data/version?t=${Date.now()}`, {
+    headers: { "Cache-Control": "no-cache", "Pragma": "no-cache" }
+  });
   if (!res.ok) return 0;
   const data = await res.json();
   return data.version || 0;

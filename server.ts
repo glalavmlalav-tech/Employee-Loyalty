@@ -187,6 +187,14 @@ Output MUST conform to this exact JSON schema structure. No Markdown wrapping, p
 // ZERO-READ PERSISTENT DATA ENDPOINTS
 // ==========================================
 
+// Ensure API responses are never cached by browser, proxy, or Service Worker
+app.use("/api", (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+
 // Bootstrap: Returns all data in 1 request from local server memory (0 Firestore reads)
 app.get("/api/data", (req, res) => {
   try {
