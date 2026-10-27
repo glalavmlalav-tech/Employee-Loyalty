@@ -83,94 +83,11 @@ export function stripHeavyImages(employees: Employee[]): Employee[] {
   });
 }
 
-export interface PersistentDeletionRecord {
-  id: string;
-  isDeleted: boolean;
-  status: "deleted";
-  deletedAt: string;
-  deletedBy: string;
-}
-
-const PERSISTENT_DELETED_KEY = "corporate_persistent_deleted_ids";
-
-export function getPersistentDeletedMap(): Map<string, PersistentDeletionRecord> {
-  const map = new Map<string, PersistentDeletionRecord>();
-  if (typeof window === "undefined") return map;
+// Clean up any stale client-side deletion override traps on module evaluation
+if (typeof window !== "undefined") {
   try {
-    const raw = localStorage.getItem(PERSISTENT_DELETED_KEY);
-    if (raw) {
-      const parsed: Record<string, PersistentDeletionRecord> = JSON.parse(raw);
-      for (const [id, record] of Object.entries(parsed)) {
-        map.set((id || "").trim(), record);
-      }
-    }
+    localStorage.removeItem("corporate_persistent_deleted_ids");
   } catch (e) {}
-  return map;
-}
-
-export function recordPersistentDeletion(record: PersistentDeletionRecord): void {
-  if (typeof window === "undefined" || !record.id) return;
-  const cleanId = record.id.trim();
-  try {
-    const map = getPersistentDeletedMap();
-    map.set(cleanId, { ...record, id: cleanId });
-    const obj: Record<string, PersistentDeletionRecord> = {};
-    map.forEach((val, key) => { obj[key] = val; });
-    localStorage.setItem(PERSISTENT_DELETED_KEY, JSON.stringify(obj));
-  } catch (e) {}
-}
-
-export function removePersistentDeletion(id: string): void {
-  if (typeof window === "undefined" || !id) return;
-  const cleanId = id.trim();
-  try {
-    const map = getPersistentDeletedMap();
-    map.delete(cleanId);
-    const obj: Record<string, PersistentDeletionRecord> = {};
-    map.forEach((val, key) => { obj[key] = val; });
-    localStorage.setItem(PERSISTENT_DELETED_KEY, JSON.stringify(obj));
-  } catch (e) {}
-}
-
-export function applyPersistentDeletions(employees: Employee[]): Employee[] {
-  if (!Array.isArray(employees)) return [];
-  const deletedMap = getPersistentDeletedMap();
-
-  return employees.map((emp) => {
-    const cleanId = (emp.id || "").trim();
-    const record = deletedMap.get(cleanId);
-
-    // If marked deleted in persistent storage, enforce deleted status
-    if (record) {
-      return {
-        ...emp,
-        id: cleanId,
-        isDeleted: true,
-        status: "deleted" as const,
-        deletedAt: emp.deletedAt || record.deletedAt,
-        deletedBy: emp.deletedBy || record.deletedBy
-      };
-    }
-
-    // If already marked deleted from server, also remember it locally
-    if (emp.isDeleted === true || emp.status === "deleted") {
-      recordPersistentDeletion({
-        id: cleanId,
-        isDeleted: true,
-        status: "deleted",
-        deletedAt: emp.deletedAt || new Date().toISOString(),
-        deletedBy: emp.deletedBy || "admin"
-      });
-      return {
-        ...emp,
-        id: cleanId,
-        isDeleted: true,
-        status: "deleted" as const
-      };
-    }
-
-    return { ...emp, id: cleanId };
-  });
 }
 
 /**
@@ -185,7 +102,7 @@ export function getInitialCachedEmployees(): Employee[] {
     if (summaryStr) {
       const parsed = JSON.parse(summaryStr);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return applyPersistentDeletions(parsed);
+        return parsed;
       }
     }
   } catch (e) {}
@@ -196,7 +113,7 @@ export function getInitialCachedEmployees(): Employee[] {
     if (legacyStr) {
       const parsed = JSON.parse(legacyStr);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return applyPersistentDeletions(parsed);
+        return parsed;
       }
     }
   } catch (e) {}
@@ -211,19 +128,17 @@ export function getInitialCachedEmployees(): Employee[] {
 export function persistEmployeesLocally(employees: Employee[]): void {
   if (!Array.isArray(employees) || employees.length === 0) return;
 
-  const sanitized = applyPersistentDeletions(employees);
-
   // 1. Full persistence to IndexedDB (asynchronous, holds all MBs of documents)
-  idbSet("full_employees", sanitized).catch(() => {});
+  idbSet("full_employees", employees).catch(() => {});
 
   // 2. Lightweight summary to localStorage (synchronous, ~35KB)
   try {
-    const light = stripHeavyImages(sanitized);
+    const light = stripHeavyImages(employees);
     localStorage.setItem("cache_employees_summary", JSON.stringify(light));
   } catch (e) {
     // If even that somehow fails, strip all images completely
     try {
-      const ultraLight = sanitized.map(emp => ({
+      const ultraLight = employees.map(emp => ({
         id: emp.id,
         name: emp.name,
         business: emp.business,

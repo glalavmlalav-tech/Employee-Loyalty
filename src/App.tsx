@@ -79,10 +79,7 @@ import {
 import { 
   getInitialCachedEmployees, 
   persistEmployeesLocally, 
-  idbGet,
-  recordPersistentDeletion,
-  removePersistentDeletion,
-  applyPersistentDeletions
+  idbGet 
 } from "./utils/localDb";
 
 const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
@@ -447,9 +444,8 @@ export default function App() {
       const data = await fetchBootstrapData();
       if (data) {
         if (Array.isArray(data.employees)) {
-          const sanitizedEmployees = applyPersistentDeletions(data.employees);
-          setEmployees(sanitizedEmployees);
-          persistEmployeesLocally(sanitizedEmployees);
+          setEmployees(data.employees);
+          persistEmployeesLocally(data.employees);
         }
         if (Array.isArray(data.leave_requests)) {
           const sorted = data.leave_requests.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
@@ -500,9 +496,8 @@ export default function App() {
 
       if (!empSnap.empty) {
         const rawEmps = empSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Employee));
-        const fetchedEmps = applyPersistentDeletions(rawEmps);
-        setEmployees(fetchedEmps);
-        persistEmployeesLocally(fetchedEmps);
+        setEmployees(rawEmps);
+        persistEmployeesLocally(rawEmps);
       }
       if (!leaveSnap.empty) {
         const fetchedLeaves = leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LeaveRequest));
@@ -549,7 +544,7 @@ export default function App() {
     // Rehydrate full high-res images and documents from IndexedDB without network delay
     idbGet<Employee[]>("full_employees").then((full) => {
       if (Array.isArray(full) && full.length > 0) {
-        setEmployees(applyPersistentDeletions(full));
+        setEmployees(full);
       }
     }).catch(() => {});
 
@@ -655,26 +650,17 @@ export default function App() {
       deletedBy: senderName
     };
 
-    // 1. Immediately record in permanent persistent storage (immune to reloads, tabs, restarts)
-    recordPersistentDeletion({
-      id: cleanId,
-      isDeleted: true,
-      status: "deleted",
-      deletedAt: nowIso,
-      deletedBy: senderName
-    });
-
-    // 2. Optimistic UI update
+    // 1. Optimistic UI update
     setEmployees((prev) => {
       const updated = prev.map((e) => ((e.id || "").trim() === cleanId ? { ...e, ...deletionPayload } : e));
       persistEmployeesLocally(updated);
       return updated;
     });
 
-    // 3. Mark operation in progress to prevent background reloads from racing
+    // 2. Mark operation in progress to prevent background reloads from racing
     isOperationInProgressRef.current = true;
 
-    // 4. Save to SQL backend store
+    // 3. Save to SQL backend store
     try {
       const result: any = await apiUpdateEmployee(cleanId, deletionPayload);
       if (result && result.version) {
@@ -684,7 +670,7 @@ export default function App() {
       console.warn("Notice: Backend store delete warning:", e);
     }
 
-    // 5. Save to cloud Firestore
+    // 4. Mirror to cloud Firestore
     try {
       const docRef = doc(db, "employees", cleanId);
       await setDoc(docRef, deletionPayload, { merge: true });
@@ -693,16 +679,13 @@ export default function App() {
     } finally {
       setTimeout(() => {
         isOperationInProgressRef.current = false;
-      }, 2000);
+      }, 1500);
     }
   };
 
   const restoreEmployeeFromTrash = async (id: string) => {
     const cleanId = (id || "").trim();
     if (!cleanId) return;
-
-    // 1. Remove from permanent persistent storage
-    removePersistentDeletion(cleanId);
 
     const restorePayload: Partial<Employee> = {
       isDeleted: false,
@@ -711,7 +694,7 @@ export default function App() {
       deletedBy: null as any
     };
 
-    // 2. Optimistic UI update
+    // 1. Optimistic UI update
     setEmployees((prev) => {
       const updated = prev.map((e) => {
         if ((e.id || "").trim() === cleanId) {
@@ -728,6 +711,7 @@ export default function App() {
 
     isOperationInProgressRef.current = true;
 
+    // 2. Update SQL backend store
     try {
       const result: any = await apiUpdateEmployee(cleanId, restorePayload);
       if (result && result.version) {
@@ -737,6 +721,7 @@ export default function App() {
       console.warn("Notice: Backend store restore warning:", e);
     }
 
+    // 3. Mirror to cloud Firestore
     try {
       const docRef = doc(db, "employees", cleanId);
       await updateDoc(docRef, {
@@ -750,15 +735,13 @@ export default function App() {
     } finally {
       setTimeout(() => {
         isOperationInProgressRef.current = false;
-      }, 2000);
+      }, 1500);
     }
   };
 
   const permanentlyDeleteEmployeeFromFirestore = async (id: string) => {
     const cleanId = (id || "").trim();
     if (!cleanId) return;
-
-    removePersistentDeletion(cleanId);
 
     // Optimistic update
     setEmployees((prev) => {
