@@ -174,13 +174,15 @@ export function sqlFetchAllData() {
   const safeParseEmp = (row: { data_json: string; is_deleted: number; status: string; deleted_at: string | null; deleted_by: string | null }) => {
     try {
       const obj = JSON.parse(row.data_json);
-      // Strictly enforce synchronization with SQLite columns
-      const isDel = row.is_deleted === 1;
+      // Strictly enforce synchronization with SQLite columns and JSON properties
+      const isDel = row.is_deleted === 1 || row.status === "deleted" || obj.isDeleted === true || obj.isDeleted === 1 || obj.status === "deleted";
       obj.isDeleted = isDel;
       if (isDel) {
         obj.status = "deleted";
         if (row.deleted_at) obj.deletedAt = row.deleted_at;
         if (row.deleted_by) obj.deletedBy = row.deleted_by;
+        if (!obj.deletedAt) obj.deletedAt = new Date().toISOString();
+        if (!obj.deletedBy) obj.deletedBy = "admin";
       } else {
         if (!obj.status || obj.status === "deleted") {
           obj.status = "active";

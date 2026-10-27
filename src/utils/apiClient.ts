@@ -38,7 +38,7 @@ export async function apiSaveEmployee(emp: Employee): Promise<Employee> {
 }
 
 export async function apiUpdateEmployee(id: string, partial: Partial<Employee>): Promise<Employee> {
-  const res = await fetch(`/api/employees/${id}`, {
+  const res = await fetch(`/api/employees/${encodeURIComponent(id)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(partial),
@@ -48,7 +48,7 @@ export async function apiUpdateEmployee(id: string, partial: Partial<Employee>):
 }
 
 export async function apiDeleteEmployee(id: string): Promise<boolean> {
-  const res = await fetch(`/api/employees/${id}`, {
+  const res = await fetch(`/api/employees/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete employee");

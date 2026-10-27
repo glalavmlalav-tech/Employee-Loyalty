@@ -5,11 +5,17 @@ import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 
+import compression from "compression";
+
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
 
+app.use(compression({
+  threshold: 1024, // Compress anything larger than 1KB
+  level: 6 // Balanced high-speed compression
+}));
 app.use(express.json({ limit: "15mb" }));
 
 import {

@@ -76,6 +76,11 @@ import {
   apiRestoreBackup,
   apiGetSqlStatus
 } from "./utils/apiClient";
+import { 
+  getInitialCachedEmployees, 
+  persistEmployeesLocally, 
+  idbGet 
+} from "./utils/localDb";
 
 const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
   {
@@ -185,17 +190,7 @@ export default function App() {
   const [systemDate, setSystemDate] = useState<string>(getTodayDateString);
   
   // Real-time states with robust local caching fallbacks
-  const [employees, setEmployees] = useState<Employee[]>(() => {
-    const cached = localStorage.getItem("cache_employees");
-    if (cached) {
-      try {
-        return JSON.parse(cached);
-      } catch (e) {
-        return [];
-      }
-    }
-    return [];
-  });
+  const [employees, setEmployees] = useState<Employee[]>(getInitialCachedEmployees);
   const [activities, setActivities] = useState<LoyaltyActivity[]>(() => {
     const cached = localStorage.getItem("cache_activities");
     if (cached) {
@@ -273,7 +268,9 @@ export default function App() {
     return localStorage.getItem("loyalty_guest_name");
   });
   const [authLoading, setAuthLoading] = useState(true);
-  const [dbLoading, setDbLoading] = useState(true);
+  const [dbLoading, setDbLoading] = useState<boolean>(() => {
+    return getInitialCachedEmployees().length === 0;
+  });
   const [dbError, setDbError] = useState<any | null>(null);
 
   // Security Guard Public Portal Route Detection
@@ -444,7 +441,7 @@ export default function App() {
       if (data) {
         if (Array.isArray(data.employees)) {
           setEmployees(data.employees);
-          safeLocalStorageSetItem("cache_employees", JSON.stringify(data.employees));
+          persistEmployeesLocally(data.employees);
         }
         if (Array.isArray(data.leave_requests)) {
           const sorted = data.leave_requests.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
@@ -496,7 +493,7 @@ export default function App() {
       if (!empSnap.empty) {
         const fetchedEmps = empSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Employee));
         setEmployees(fetchedEmps);
-        safeLocalStorageSetItem("cache_employees", JSON.stringify(fetchedEmps));
+        persistEmployeesLocally(fetchedEmps);
       }
       if (!leaveSnap.empty) {
         const fetchedLeaves = leaveSnap.docs.map((d) => ({ id: d.id, ...d.data() } as LeaveRequest));
@@ -539,6 +536,14 @@ export default function App() {
   // Initial load on mount + real-time lightweight version ping
   useEffect(() => {
     initLogoSync();
+
+    // Rehydrate full high-res images and documents from IndexedDB without network delay
+    idbGet<Employee[]>("full_employees").then((full) => {
+      if (Array.isArray(full) && full.length > 0) {
+        setEmployees(full);
+      }
+    }).catch(() => {});
+
     loadDataFromServer();
 
     // Check version every 10 seconds (0 Firestore read cost, served directly by Express memory)
@@ -590,7 +595,7 @@ export default function App() {
     // Optimistic update
     setEmployees((prev) => {
       const updated = [...prev, newEmp];
-      safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+      persistEmployeesLocally(updated);
       return updated;
     });
 
@@ -610,7 +615,7 @@ export default function App() {
     // Optimistic update
     setEmployees((prev) => {
       const updated = prev.map((e) => (e.id === id ? { ...e, ...empData } : e));
-      safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+      persistEmployeesLocally(updated);
       return updated;
     });
 
@@ -638,7 +643,7 @@ export default function App() {
     // Optimistic update
     setEmployees((prev) => {
       const updated = prev.map((e) => (e.id === id ? { ...e, ...deletionPayload } : e));
-      safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+      persistEmployeesLocally(updated);
       return updated;
     });
 
@@ -650,7 +655,7 @@ export default function App() {
 
     try {
       const docRef = doc(db, "employees", id);
-      await updateDoc(docRef, deletionPayload);
+      await setDoc(docRef, deletionPayload, { merge: true });
     } catch (e) {
       console.warn("Notice: Direct Firestore delete handled via backend:", e);
     }
@@ -675,7 +680,7 @@ export default function App() {
         }
         return e;
       });
-      safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+      persistEmployeesLocally(updated);
       return updated;
     });
 
@@ -702,7 +707,7 @@ export default function App() {
     // Optimistic update
     setEmployees((prev) => {
       const updated = prev.filter((e) => e.id !== id);
-      safeLocalStorageSetItem("cache_employees", JSON.stringify(updated));
+      persistEmployeesLocally(updated);
       return updated;
     });
 
@@ -1939,7 +1944,7 @@ export default function App() {
 
           {/* Active component view rendered strictly here */}
           <div className="transition-all duration-300">
-            {dbLoading ? (
+            {dbLoading && employees.length === 0 ? (
               <div className="text-center py-24 glass-panel rounded-[36px] shadow-sm">
                 <RefreshCw className="w-9 h-9 mx-auto text-amber-500 animate-spin mb-4" />
                 <p className="text-slate-700 text-sm font-bold">{t.loadingText}</p>
