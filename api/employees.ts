@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { compressEmployeeRecord } from "./serverImageCompression.ts";
+import { compressEmployeeRecord } from "./serverImageCompression";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");

@@ -19,8 +19,8 @@ import {
   sqlRestoreAllData,
   getSqlDiagnostics,
   sqlInspectTable
-} from "./sqlDatabase.ts";
-import { compressEmployeeRecord } from "./serverImageCompression.ts";
+} from "./sqlDatabase";
+import { compressEmployeeRecord } from "./serverImageCompression";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");

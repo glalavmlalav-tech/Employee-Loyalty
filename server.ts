@@ -37,7 +37,7 @@ import {
   restoreStore,
   getDbDiagnostics,
   getDbTableRows
-} from "./api/dataStore.ts";
+} from "./api/dataStore";
 
 // In-memory cache for developer uploaded custom PWA icons
 let inMemoryCustomIconBuffer: Buffer | null = null;
@@ -385,14 +385,29 @@ async function setupServer() {
     console.log("Setting up Vite Express server in development mode...");
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: false },
-      appType: "spa",
+      appType: "custom",
     });
     app.use(vite.middlewares);
+
+    app.use("*", async (req, res, next) => {
+      if (req.originalUrl.startsWith("/api")) {
+        return next();
+      }
+      try {
+        const url = req.originalUrl;
+        const indexPath = path.resolve(process.cwd(), "index.html");
+        let template = fs.readFileSync(indexPath, "utf-8");
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      } catch (e: any) {
+        vite.ssrFixStacktrace(e);
+        next(e);
+      }
+    });
   } else {
     console.log("Setting up Express server in production mode...");
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    // Since we're in Express 4, use app.get("*", ...)
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });

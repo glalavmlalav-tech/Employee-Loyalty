@@ -1,10 +1,25 @@
-import sharp from "sharp";
-
 /**
- * Server-side image compression using Sharp.
- * Converts base64 / data URLs into optimized, high-fidelity WebP or JPEG.
- * Ensures maximum visual clarity for text/IDs while reducing bytes by 40-80%.
+ * Server-side image compression utility.
+ * Lazily loads Sharp when available, with graceful raw image fallback for serverless (Vercel) environments.
  */
+
+let sharpModule: any = null;
+let sharpChecked = false;
+
+async function getSharp() {
+  if (!sharpChecked) {
+    sharpChecked = true;
+    try {
+      const m = await import("sharp");
+      sharpModule = m.default || m;
+    } catch (e) {
+      console.warn("[ServerImageCompression] Sharp native module unavailable in serverless runtime, using raw image fallback.");
+      sharpModule = null;
+    }
+  }
+  return sharpModule;
+}
+
 export async function compressServerImageBase64(
   dataUrlOrBase64: string | null | undefined,
   maxWidth: number = 800,
@@ -14,7 +29,7 @@ export async function compressServerImageBase64(
 ): Promise<string> {
   if (!dataUrlOrBase64 || typeof dataUrlOrBase64 !== "string") return "";
 
-  // If it's a URL (http/https) or an SVG, return as is
+  // If it's a URL or SVG, return as is
   if (dataUrlOrBase64.startsWith("http://") || dataUrlOrBase64.startsWith("https://") || dataUrlOrBase64.startsWith("/assets/")) {
     return dataUrlOrBase64;
   }
@@ -32,6 +47,11 @@ export async function compressServerImageBase64(
   }
 
   try {
+    const sharp = await getSharp();
+    if (!sharp) {
+      return dataUrlOrBase64;
+    }
+
     const inputBuffer = Buffer.from(base64Data, "base64");
     const image = sharp(inputBuffer);
     const metadata = await image.metadata();
@@ -54,12 +74,10 @@ export async function compressServerImageBase64(
       outMime = "image/jpeg";
     }
 
-    // Only use compressed version if it actually saves space or normalizes dimensions
     if (outputBuffer.length < inputBuffer.length) {
       return `data:${outMime};base64,${outputBuffer.toString("base64")}`;
     }
 
-    // If original was already smaller and within reasonable dimensions, keep original
     if ((metadata.width || 0) <= maxWidth && (metadata.height || 0) <= maxHeight) {
       return dataUrlOrBase64;
     }
@@ -71,10 +89,6 @@ export async function compressServerImageBase64(
   }
 }
 
-/**
- * Automatically compress all image properties of an employee record
- * (photoUrl, passportOrNationalCardUrl, iqamaUrl)
- */
 export async function compressEmployeeRecord<T extends Record<string, any>>(emp: T): Promise<T> {
   if (!emp || typeof emp !== "object") return emp;
   const result: any = { ...emp };

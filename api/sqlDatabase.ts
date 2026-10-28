@@ -1,22 +1,33 @@
 import fs from "fs";
 import path from "path";
-import { DatabaseSync } from "node:sqlite";
+
+let DatabaseSyncClass: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const nodeSqlite = (eval('require'))("node:sqlite");
+  DatabaseSyncClass = nodeSqlite?.DatabaseSync || null;
+} catch (e) {
+  // node:sqlite is available on Node >= 22.5.0; in older Node environments (e.g. Vercel), fallback safely
+}
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const SQLITE_FILE = path.join(DATA_DIR, "app_database.sqlite");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
 const BACKUP_PATH = path.join(process.cwd(), "firestore-backup.json");
 
-let sqliteDb: DatabaseSync | null = null;
+let sqliteDb: any = null;
 
 // Initialize and ensure tables exist
-export function getSqliteDb(): DatabaseSync {
+export function getSqliteDb(): any {
+  if (!DatabaseSyncClass) {
+    throw new Error("node:sqlite is not supported in this runtime. Falling back to JSON store.");
+  }
   if (!sqliteDb) {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
 
-    sqliteDb = new DatabaseSync(SQLITE_FILE);
+    sqliteDb = new DatabaseSyncClass(SQLITE_FILE);
     sqliteDb.exec("PRAGMA journal_mode = WAL;");
     sqliteDb.exec("PRAGMA synchronous = NORMAL;");
 
