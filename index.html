@@ -9,6 +9,52 @@
     <script>
       // Suppress Vite dev HMR WebSocket disconnect errors in AI Studio iframe proxy
       (function() {
+        try {
+          var RealWebSocket = window.WebSocket;
+          if (RealWebSocket) {
+            class MockWebSocket extends RealWebSocket {
+              constructor(url, protocols) {
+                var isVite = (protocols === 'vite-hmr') ||
+                  (Array.isArray(protocols) && protocols.indexOf('vite-hmr') !== -1) ||
+                  (typeof url === 'string' && (url.indexOf('vite-hmr') !== -1 || url.indexOf('@vite') !== -1));
+                if (isVite) {
+                  var dummy = {
+                    url: String(url),
+                    protocol: 'vite-hmr',
+                    readyState: 1, // WebSocket.OPEN
+                    bufferedAmount: 0,
+                    extensions: '',
+                    binaryType: 'blob',
+                    onopen: null,
+                    onmessage: null,
+                    onerror: null,
+                    onclose: null,
+                    send: function() {},
+                    close: function() {},
+                    addEventListener: function(type, fn) {
+                      if (type === 'open') {
+                        setTimeout(function() {
+                          try { fn(new Event('open')); } catch (e) {}
+                        }, 0);
+                      }
+                    },
+                    removeEventListener: function() {},
+                    dispatchEvent: function() { return true; }
+                  };
+                  setTimeout(function() {
+                    try {
+                      if (typeof dummy.onopen === 'function') dummy.onopen(new Event('open'));
+                    } catch (e) {}
+                  }, 0);
+                  return dummy;
+                }
+                super(url, protocols);
+              }
+            }
+            window.WebSocket = MockWebSocket;
+          }
+        } catch (e) {}
+
         var origConsoleError = console.error;
         console.error = function() {
           var text = '';
