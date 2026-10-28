@@ -1,13 +1,18 @@
 import fs from "fs";
 import path from "path";
+import { createRequire } from "module";
 
 let DatabaseSyncClass: any = null;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const nodeSqlite = (eval('require'))("node:sqlite");
+  const require = createRequire(import.meta.url);
+  const nodeSqlite = require("node:sqlite");
   DatabaseSyncClass = nodeSqlite?.DatabaseSync || null;
 } catch (e) {
   // node:sqlite is available on Node >= 22.5.0; in older Node environments (e.g. Vercel), fallback safely
+}
+
+export function isSqliteSupported(): boolean {
+  return DatabaseSyncClass !== null;
 }
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -20,7 +25,7 @@ let sqliteDb: any = null;
 // Initialize and ensure tables exist
 export function getSqliteDb(): any {
   if (!DatabaseSyncClass) {
-    throw new Error("node:sqlite is not supported in this runtime. Falling back to JSON store.");
+    return null;
   }
   if (!sqliteDb) {
     if (!fs.existsSync(DATA_DIR)) {

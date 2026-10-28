@@ -7,16 +7,46 @@
     <meta name="description" content="سیستەمی بەڕێوەبردن و داواکاری مۆڵەتی کارمەندان" />
 
     <script>
-      // Suppress Vite dev HMR WebSocket disconnect messages in dev iframe
+      // Suppress Vite dev HMR WebSocket disconnect errors in AI Studio iframe proxy
       (function() {
         var origConsoleError = console.error;
         console.error = function() {
-          var msg = arguments[0];
-          if (typeof msg === 'string' && (msg.includes('WebSocket') || msg.includes('vite') || msg.includes('vite-hmr'))) {
+          var text = '';
+          for (var i = 0; i < arguments.length; i++) {
+            var a = arguments[i];
+            if (a instanceof Error) {
+              text += ' ' + (a.message || '') + ' ' + (a.stack || '');
+            } else if (a !== null && a !== undefined) {
+              text += ' ' + String(a);
+            }
+          }
+          if (
+            text.indexOf('closed without opened') !== -1 ||
+            (text.indexOf('[vite]') !== -1 && text.indexOf('WebSocket') !== -1) ||
+            text.indexOf('vite-hmr') !== -1
+          ) {
             return;
           }
           return origConsoleError.apply(console, arguments);
         };
+
+        window.addEventListener('error', function(e) {
+          var msg = (e && e.message) ? String(e.message) : '';
+          var fn = (e && e.filename) ? String(e.filename) : '';
+          if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('closed without opened') !== -1 || fn.indexOf('@vite/client') !== -1) {
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            if (e.preventDefault) e.preventDefault();
+            return true;
+          }
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(e) {
+          var reason = (e && e.reason) ? (e.reason.message || String(e.reason)) : '';
+          if (reason.indexOf('WebSocket') !== -1 || reason.indexOf('closed without opened') !== -1) {
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            if (e.preventDefault) e.preventDefault();
+          }
+        }, true);
       })();
     </script>
     

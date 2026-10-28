@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import {
   getSqliteDb,
+  isSqliteSupported,
   sqlFetchAllData,
   sqlInsertOrUpdateEmployee,
   sqlUpdateEmployeeFields,
@@ -49,29 +50,35 @@ let dataVersion = 1;
 
 // Load data into memory on module load from SQL
 export function initStore(): void {
-  try {
-    getSqliteDb();
-    const sqlData = sqlFetchAllData();
-    memoryState = {
-      employees: sqlData.employees || [],
-      leave_requests: sqlData.leave_requests || [],
-      app_users: sqlData.app_users || [],
-      activities: sqlData.activities || [],
-      gifts: sqlData.gifts || [],
-      messages: sqlData.messages || [],
-      system_settings: sqlData.system_settings || []
-    };
-    persistStoreMirror();
-    console.log(`[DataStore] Loaded ${memoryState.employees.length} employees from SQL database.`);
-  } catch (e) {
-    console.error("[DataStore] Failed to initialize from SQL database:", e);
-    // Fallback to store.json if SQLite had an issue
-    if (fs.existsSync(STORE_PATH)) {
-      try {
-        const raw = fs.readFileSync(STORE_PATH, "utf-8");
-        memoryState = JSON.parse(raw);
-      } catch (err) {}
+  if (isSqliteSupported()) {
+    try {
+      const db = getSqliteDb();
+      if (db) {
+        const sqlData = sqlFetchAllData();
+        memoryState = {
+          employees: sqlData.employees || [],
+          leave_requests: sqlData.leave_requests || [],
+          app_users: sqlData.app_users || [],
+          activities: sqlData.activities || [],
+          gifts: sqlData.gifts || [],
+          messages: sqlData.messages || [],
+          system_settings: sqlData.system_settings || []
+        };
+        persistStoreMirror();
+        console.log(`[DataStore] Loaded ${memoryState.employees.length} employees from SQL database.`);
+        return;
+      }
+    } catch (e) {
+      // Fall through to store.json below
     }
+  }
+
+  // Fallback to store.json if SQLite had an issue or is not supported
+  if (fs.existsSync(STORE_PATH)) {
+    try {
+      const raw = fs.readFileSync(STORE_PATH, "utf-8");
+      memoryState = JSON.parse(raw);
+    } catch (err) {}
   }
 }
 
@@ -90,18 +97,18 @@ function persistStoreMirror(): void {
 
 // Get all data directly from SQL
 export function getAllData() {
-  try {
-    const sqlData = sqlFetchAllData();
-    if (sqlData && sqlData.employees && sqlData.employees.length > 0) {
-      memoryState = sqlData as DataStoreState;
-    }
-  } catch (e) {
-    console.warn("Notice: Fetching from memory cache fallback:", e);
+  if (isSqliteSupported()) {
+    try {
+      const sqlData = sqlFetchAllData();
+      if (sqlData && sqlData.employees && sqlData.employees.length > 0) {
+        memoryState = sqlData as DataStoreState;
+      }
+    } catch (e) {}
   }
 
   return {
     ...memoryState,
-    databaseEngine: "SQLite 3",
+    databaseEngine: isSqliteSupported() ? "SQLite 3" : "JSON Store",
     version: dataVersion,
     timestamp: new Date().toISOString()
   };
@@ -120,8 +127,12 @@ export async function saveEmployee(employee: any) {
   // Pre-compress images if present
   const compressedEmployee = await compressEmployeeRecord(employee);
 
-  // 1. Save to SQL
-  sqlInsertOrUpdateEmployee(compressedEmployee);
+  // 1. Save to SQL if supported
+  if (isSqliteSupported()) {
+    try {
+      sqlInsertOrUpdateEmployee(compressedEmployee);
+    } catch (e) {}
+  }
 
   // 2. Update memory state
   if (!memoryState.employees) memoryState.employees = [];
@@ -140,16 +151,21 @@ export async function updateEmployee(id: string, partial: any) {
   // Pre-compress partial images if present
   const compressedPartial = await compressEmployeeRecord(partial);
 
-  // 1. Save to SQL
-  const updatedInSql = sqlUpdateEmployeeFields(cleanId, compressedPartial);
+  // 1. Save to SQL if supported
+  let updatedInSql: any = { ...compressedPartial, id: cleanId };
+  if (isSqliteSupported()) {
+    try {
+      updatedInSql = sqlUpdateEmployeeFields(cleanId, compressedPartial);
+    } catch (e) {}
+  }
 
   // 2. Update memory state
   if (!memoryState.employees) memoryState.employees = [];
   const idx = memoryState.employees.findIndex((e) => (e.id || "").trim() === cleanId);
   if (idx >= 0) {
-    memoryState.employees[idx] = updatedInSql;
+    memoryState.employees[idx] = { ...memoryState.employees[idx], ...updatedInSql };
     persistStoreMirror();
-    return { ...updatedInSql, version: dataVersion };
+    return { ...memoryState.employees[idx], version: dataVersion };
   } else {
     memoryState.employees.push(updatedInSql);
     persistStoreMirror();
@@ -158,8 +174,12 @@ export async function updateEmployee(id: string, partial: any) {
 }
 
 export function deleteEmployee(id: string) {
-  // 1. Delete from SQL
-  sqlDeleteEmployeePermanently(id);
+  // 1. Delete from SQL if supported
+  if (isSqliteSupported()) {
+    try {
+      sqlDeleteEmployeePermanently(id);
+    } catch (e) {}
+  }
 
   // 2. Update memory state
   if (!memoryState.employees) memoryState.employees = [];
@@ -174,7 +194,11 @@ export function getLeaveRequests() {
 }
 
 export function saveLeaveRequest(leave: any) {
-  sqlInsertOrUpdateLeave(leave);
+  if (isSqliteSupported()) {
+    try {
+      sqlInsertOrUpdateLeave(leave);
+    } catch (e) {}
+  }
 
   if (!memoryState.leave_requests) memoryState.leave_requests = [];
   const idx = memoryState.leave_requests.findIndex((l) => l.id === leave.id);
@@ -188,12 +212,17 @@ export function saveLeaveRequest(leave: any) {
 }
 
 export function updateLeaveRequest(id: string, partial: any) {
-  const updated = sqlUpdateLeaveFields(id, partial);
+  let updated = { ...partial, id };
+  if (isSqliteSupported()) {
+    try {
+      updated = sqlUpdateLeaveFields(id, partial);
+    } catch (e) {}
+  }
 
   if (!memoryState.leave_requests) memoryState.leave_requests = [];
   const idx = memoryState.leave_requests.findIndex((l) => l.id === id);
   if (idx >= 0) {
-    memoryState.leave_requests[idx] = { ...memoryState.leave_requests[idx], ...partial };
+    memoryState.leave_requests[idx] = { ...memoryState.leave_requests[idx], ...updated };
     persistStoreMirror();
     return memoryState.leave_requests[idx];
   } else {
@@ -204,7 +233,11 @@ export function updateLeaveRequest(id: string, partial: any) {
 }
 
 export function deleteLeaveRequest(id: string) {
-  sqlDeleteLeave(id);
+  if (isSqliteSupported()) {
+    try {
+      sqlDeleteLeave(id);
+    } catch (e) {}
+  }
 
   if (!memoryState.leave_requests) memoryState.leave_requests = [];
   memoryState.leave_requests = memoryState.leave_requests.filter((l) => l.id !== id);
@@ -218,7 +251,11 @@ export function getAppUsers() {
 }
 
 export function saveAppUser(user: any) {
-  sqlInsertOrUpdateAppUser(user);
+  if (isSqliteSupported()) {
+    try {
+      sqlInsertOrUpdateAppUser(user);
+    } catch (e) {}
+  }
 
   if (!memoryState.app_users) memoryState.app_users = [];
   const idx = memoryState.app_users.findIndex((u) => u.id === user.id || u.username === user.username);
@@ -232,7 +269,11 @@ export function saveAppUser(user: any) {
 }
 
 export function deleteAppUser(id: string) {
-  sqlDeleteAppUser(id);
+  if (isSqliteSupported()) {
+    try {
+      sqlDeleteAppUser(id);
+    } catch (e) {}
+  }
   if (!memoryState.app_users) memoryState.app_users = [];
   memoryState.app_users = memoryState.app_users.filter((u) => u.id !== id && u.username !== id);
   persistStoreMirror();
@@ -241,7 +282,11 @@ export function deleteAppUser(id: string) {
 
 // Activities, Gifts, Messages, Settings via SQL
 export function saveActivity(act: any) {
-  sqlInsertOrUpdateActivity(act);
+  if (isSqliteSupported()) {
+    try {
+      sqlInsertOrUpdateActivity(act);
+    } catch (e) {}
+  }
 
   if (!memoryState.activities) memoryState.activities = [];
   const idx = memoryState.activities.findIndex((a) => a.id === act.id);
@@ -252,7 +297,11 @@ export function saveActivity(act: any) {
 }
 
 export function deleteActivity(id: string) {
-  sqlDeleteActivity(id);
+  if (isSqliteSupported()) {
+    try {
+      sqlDeleteActivity(id);
+    } catch (e) {}
+  }
   if (!memoryState.activities) memoryState.activities = [];
   memoryState.activities = memoryState.activities.filter((a) => a.id !== id);
   persistStoreMirror();
@@ -260,7 +309,11 @@ export function deleteActivity(id: string) {
 }
 
 export function saveGift(gift: any) {
-  sqlInsertOrUpdateGift(gift);
+  if (isSqliteSupported()) {
+    try {
+      sqlInsertOrUpdateGift(gift);
+    } catch (e) {}
+  }
 
   if (!memoryState.gifts) memoryState.gifts = [];
   const idx = memoryState.gifts.findIndex((g) => g.id === gift.id);
@@ -271,7 +324,11 @@ export function saveGift(gift: any) {
 }
 
 export function saveMessage(msg: any) {
-  sqlInsertOrUpdateMessage(msg);
+  if (isSqliteSupported()) {
+    try {
+      sqlInsertOrUpdateMessage(msg);
+    } catch (e) {}
+  }
 
   if (!memoryState.messages) memoryState.messages = [];
   const idx = memoryState.messages.findIndex((m) => m.id === msg.id);
@@ -282,7 +339,11 @@ export function saveMessage(msg: any) {
 }
 
 export function saveSettings(settings: any) {
-  sqlInsertOrUpdateSettings(settings);
+  if (isSqliteSupported()) {
+    try {
+      sqlInsertOrUpdateSettings(settings);
+    } catch (e) {}
+  }
 
   memoryState.system_settings = [settings];
   persistStoreMirror();
@@ -294,15 +355,19 @@ export function restoreStore(fullData: any) {
   if (!fullData || typeof fullData !== "object") {
     throw new Error("Invalid backup data format");
   }
-  const restored = sqlRestoreAllData(fullData);
+  if (isSqliteSupported()) {
+    try {
+      sqlRestoreAllData(fullData);
+    } catch (e) {}
+  }
   memoryState = {
-    employees: restored.employees || [],
-    leave_requests: restored.leave_requests || [],
-    app_users: restored.app_users || [],
-    activities: restored.activities || [],
-    gifts: restored.gifts || [],
-    messages: restored.messages || [],
-    system_settings: restored.system_settings || []
+    employees: fullData.employees || [],
+    leave_requests: fullData.leave_requests || fullData.leaveRequests || [],
+    app_users: fullData.app_users || fullData.appUsers || [],
+    activities: fullData.activities || [],
+    gifts: fullData.gifts || [],
+    messages: fullData.messages || [],
+    system_settings: fullData.system_settings || []
   };
   persistStoreMirror();
   return getAllData();
@@ -310,11 +375,36 @@ export function restoreStore(fullData: any) {
 
 // Diagnostics
 export function getDbDiagnostics() {
-  return getSqlDiagnostics();
+  if (isSqliteSupported()) {
+    try {
+      return getSqlDiagnostics();
+    } catch (e) {}
+  }
+  return {
+    engine: "JSON Store",
+    tables: {
+      employees: memoryState.employees?.length || 0,
+      activeEmployees: memoryState.employees?.filter((e) => !e.isDeleted && e.status !== "deleted").length || 0,
+      trashEmployees: memoryState.employees?.filter((e) => e.isDeleted || e.status === "deleted").length || 0,
+      leaveRequests: memoryState.leave_requests?.length || 0,
+      appUsers: memoryState.app_users?.length || 0,
+      activities: memoryState.activities?.length || 0,
+      gifts: memoryState.gifts?.length || 0,
+      messages: memoryState.messages?.length || 0,
+      systemSettings: memoryState.system_settings?.length || 0,
+    }
+  };
 }
 
 export function getDbTableRows(tableName: string, limit = 100) {
-  return sqlInspectTable(tableName, limit);
+  if (isSqliteSupported()) {
+    try {
+      return sqlInspectTable(tableName, limit);
+    } catch (e) {}
+  }
+  const key = tableName === "leave_requests" ? "leave_requests" : tableName;
+  const list = (memoryState as any)[key] || [];
+  return list.slice(0, limit);
 }
 
 // Initialize on boot
