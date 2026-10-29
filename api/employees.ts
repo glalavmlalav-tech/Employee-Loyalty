@@ -1,6 +1,9 @@
-import fs from "fs";
-import path from "path";
-import { compressEmployeeRecord } from "./serverImageCompression";
+import { 
+  getEmployees, 
+  saveEmployee, 
+  updateEmployee, 
+  deleteEmployee 
+} from "./dataStore";
 
 export default async function handler(req: any, res: any) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -11,55 +14,37 @@ export default async function handler(req: any, res: any) {
     return res.status(200).end();
   }
 
-  const storePath = path.join(process.cwd(), "data", "store.json");
-  let store: any = { employees: [] };
-
   try {
-    if (fs.existsSync(storePath)) {
-      store = JSON.parse(fs.readFileSync(storePath, "utf-8"));
-    }
-    if (!Array.isArray(store.employees)) store.employees = [];
-
     const urlParts = (req.url || "").split("?")[0].split("/").filter(Boolean);
     const idFromUrl = urlParts[urlParts.length - 1] !== "employees" ? urlParts[urlParts.length - 1] : null;
-    const targetId = req.query?.id || idFromUrl;
+    const targetId = req.query?.id || req.body?.id || idFromUrl;
 
     if (req.method === "GET") {
+      const all = getEmployees();
       if (targetId) {
-        const found = store.employees.find((e: any) => e.id === targetId);
+        const cleanTarget = String(targetId).trim();
+        const found = all.find((e: any) => String(e.id).trim() === cleanTarget);
         return res.status(found ? 200 : 404).json(found || { error: "Not found" });
       }
-      return res.status(200).json(store.employees);
+      return res.status(200).json(all);
     }
 
     if (req.method === "POST") {
-      const newEmp = await compressEmployeeRecord(req.body);
-      const idx = store.employees.findIndex((e: any) => e.id === newEmp.id);
-      if (idx >= 0) {
-        store.employees[idx] = { ...store.employees[idx], ...newEmp };
-      } else {
-        store.employees.push(newEmp);
-      }
-      fs.writeFileSync(storePath, JSON.stringify(store, null, 2), "utf-8");
-      return res.status(200).json(newEmp);
+      const saved = await saveEmployee(req.body);
+      return res.status(200).json(saved);
     }
 
     if (req.method === "PUT") {
-      const partial = await compressEmployeeRecord(req.body);
-      const id = targetId || partial.id;
-      const idx = store.employees.findIndex((e: any) => e.id === id);
-      if (idx >= 0) {
-        store.employees[idx] = { ...store.employees[idx], ...partial };
-        fs.writeFileSync(storePath, JSON.stringify(store, null, 2), "utf-8");
-        return res.status(200).json(store.employees[idx]);
-      }
-      return res.status(404).json({ error: "Employee not found" });
+      const idToUpdate = targetId || req.body?.id;
+      if (!idToUpdate) return res.status(400).json({ error: "Missing ID for update" });
+      const updated = await updateEmployee(String(idToUpdate).trim(), req.body);
+      return res.status(200).json(updated);
     }
 
     if (req.method === "DELETE") {
-      if (!targetId) return res.status(400).json({ error: "Missing ID" });
-      store.employees = store.employees.filter((e: any) => e.id !== targetId);
-      fs.writeFileSync(storePath, JSON.stringify(store, null, 2), "utf-8");
+      const idToDelete = targetId || req.body?.id;
+      if (!idToDelete) return res.status(400).json({ error: "Missing ID for delete" });
+      deleteEmployee(String(idToDelete).trim());
       return res.status(200).json({ success: true });
     }
 

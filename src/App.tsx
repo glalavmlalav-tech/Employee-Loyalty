@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { 
   doc, 
-  getDoc 
+  getDoc,
+  setDoc,
+  deleteDoc
 } from "firebase/firestore";
 import { 
   signInWithPopup, 
@@ -52,6 +54,7 @@ import WhatsAppComposerModal from "./components/WhatsAppComposerModal";
 import TrashPanel from "./components/TrashPanel";
 import SecurityGuardPortal from "./components/SecurityGuardPortal";
 import PWAInstallButton from "./components/PWAInstallButton";
+import SystemHaltedScreen from "./components/SystemHaltedScreen";
 import { initLogoSync } from "./utils/logoManager";
 import { 
   fetchBootstrapData, 
@@ -68,12 +71,16 @@ import {
   apiDeleteAppUser,
   apiDeleteActivity,
   apiRestoreBackup,
-  apiGetSqlStatus
+  apiGetSqlStatus,
+  apiSaveSettings
 } from "./utils/apiClient";
 import { 
   getInitialCachedEmployees, 
   persistEmployeesLocally, 
-  idbGet 
+  idbGet,
+  recordEmployeeDeleted,
+  recordEmployeeRestored,
+  applyClientDeletions
 } from "./utils/localDb";
 
 const INITIAL_FALLBACK_EMPLOYEES: Employee[] = [
@@ -267,6 +274,23 @@ export default function App() {
   });
   const [dbError, setDbError] = useState<any | null>(null);
 
+  // System Halt / Redirection for Developer State
+  const [isSystemHalted, setIsSystemHalted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("lenya_system_halted") === "true";
+    } catch (e) {
+      return false;
+    }
+  });
+  const [newVersionUrl, setNewVersionUrl] = useState<string>(() => {
+    try {
+      return localStorage.getItem("lenya_system_new_version_url") || "";
+    } catch (e) {
+      return "";
+    }
+  });
+  const [isPreviewingHaltedScreen, setIsPreviewingHaltedScreen] = useState<boolean>(false);
+
   // Security Guard Public Portal Route Detection
   const checkIsSecurityRoute = () => {
     if (typeof window === "undefined") return false;
@@ -438,8 +462,9 @@ export default function App() {
       const data = await fetchBootstrapData();
       if (data) {
         if (Array.isArray(data.employees)) {
-          setEmployees(data.employees);
-          persistEmployeesLocally(data.employees);
+          const sanitized = applyClientDeletions(data.employees);
+          setEmployees(sanitized);
+          persistEmployeesLocally(sanitized);
         }
         if (Array.isArray(data.leave_requests)) {
           const sorted = data.leave_requests.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
@@ -466,6 +491,19 @@ export default function App() {
           setMessageLogs(sorted);
           safeLocalStorageSetItem("cache_messages", JSON.stringify(sorted));
         }
+        if (Array.isArray(data.system_settings)) {
+          const haltSetting = data.system_settings.find(
+            (s: any) => s.id === "system_halt" || s.isHalted !== undefined
+          );
+          if (haltSetting) {
+            const halted = Boolean(haltSetting.isHalted);
+            const url = typeof haltSetting.newVersionUrl === "string" ? haltSetting.newVersionUrl : "";
+            setIsSystemHalted(halted);
+            setNewVersionUrl(url);
+            safeLocalStorageSetItem("lenya_system_halted", halted ? "true" : "false");
+            safeLocalStorageSetItem("lenya_system_new_version_url", url);
+          }
+        }
         if (data.version) {
           currentVersionRef.current = data.version;
         }
@@ -486,7 +524,8 @@ export default function App() {
     // Rehydrate full high-res images and documents from IndexedDB without network delay
     idbGet<Employee[]>("full_employees").then((full) => {
       if (Array.isArray(full) && full.length > 0) {
-        setEmployees((current) => (current.length === 0 ? full : current));
+        const sanitized = applyClientDeletions(full);
+        setEmployees((current) => (current.length === 0 ? sanitized : current));
       }
     }).catch(() => {});
 
@@ -584,6 +623,9 @@ export default function App() {
     const cleanId = (id || "").trim();
     if (!cleanId) return;
 
+    // Immediately record in persistent client registry so it can NEVER resurrect
+    recordEmployeeDeleted(cleanId, false);
+
     const senderName = userSession?.name || sandboxGuest || "Admin";
     const nowIso = new Date().toISOString();
     const deletionPayload: Partial<Employee> = {
@@ -600,10 +642,15 @@ export default function App() {
       return updated;
     });
 
-    // 2. Mark operation in progress to prevent background reloads from racing
+    // 2. Mark operation in progress
     isOperationInProgressRef.current = true;
 
-    // 3. Save directly to SQL backend store
+    // 3. Save to Firestore if available
+    try {
+      setDoc(doc(db, "employees", cleanId), deletionPayload, { merge: true }).catch(() => {});
+    } catch (e) {}
+
+    // 4. Save directly to backend store
     try {
       const result: any = await apiUpdateEmployee(cleanId, deletionPayload);
       if (result && result.version) {
@@ -614,13 +661,16 @@ export default function App() {
     } finally {
       setTimeout(() => {
         isOperationInProgressRef.current = false;
-      }, 1500);
+      }, 5000);
     }
   };
 
   const restoreEmployeeFromTrash = async (id: string) => {
     const cleanId = (id || "").trim();
     if (!cleanId) return;
+
+    // Remove from persistent client deletion registry
+    recordEmployeeRestored(cleanId);
 
     const restorePayload: Partial<Employee> = {
       isDeleted: false,
@@ -646,7 +696,12 @@ export default function App() {
 
     isOperationInProgressRef.current = true;
 
-    // 2. Update SQL backend store
+    // 2. Sync to Firestore
+    try {
+      setDoc(doc(db, "employees", cleanId), { isDeleted: false, status: "active" }, { merge: true }).catch(() => {});
+    } catch (e) {}
+
+    // 3. Update backend store
     try {
       const result: any = await apiUpdateEmployee(cleanId, restorePayload);
       if (result && result.version) {
@@ -657,7 +712,7 @@ export default function App() {
     } finally {
       setTimeout(() => {
         isOperationInProgressRef.current = false;
-      }, 1500);
+      }, 5000);
     }
   };
 
@@ -665,13 +720,22 @@ export default function App() {
     const cleanId = (id || "").trim();
     if (!cleanId) return;
 
-    // Optimistic update
+    // Record permanent deletion in persistent client registry
+    recordEmployeeDeleted(cleanId, true);
+
+    // 1. Optimistic update
     setEmployees((prev) => {
       const updated = prev.filter((e) => (e.id || "").trim() !== cleanId);
       persistEmployeesLocally(updated);
       return updated;
     });
 
+    // 2. Delete from Firestore
+    try {
+      deleteDoc(doc(db, "employees", cleanId)).catch(() => {});
+    } catch (e) {}
+
+    // 3. Delete from backend store
     apiDeleteEmployee(cleanId).catch((e) => console.warn("Notice: Backend store perm-delete warning:", e));
   };
 
@@ -965,6 +1029,70 @@ export default function App() {
     return { success: false, error: language === "ku" ? "ناوی بەکارهێنەر لە سیستەمدا بوونی نییە!" : "Username does not exist." };
   };
 
+  // Developer System Halt & Redirection Manager
+  const handleUpdateSystemHalt = async (isHalted: boolean, newUrl: string) => {
+    setIsSystemHalted(isHalted);
+    setNewVersionUrl(newUrl);
+    safeLocalStorageSetItem("lenya_system_halted", isHalted ? "true" : "false");
+    safeLocalStorageSetItem("lenya_system_new_version_url", newUrl);
+
+    const payload = {
+      id: "system_halt",
+      isHalted,
+      newVersionUrl: newUrl,
+      updatedBy: userSession?.username || currentUser?.email || "developer",
+      updatedAt: new Date().toISOString()
+    };
+
+    // 1. Save to SQL/JSON backend
+    try {
+      await apiSaveSettings(payload);
+    } catch (err) {
+      console.warn("Notice: Failed to save halt setting to /api/settings:", err);
+    }
+
+    // 2. Also try Firestore collection for real-time multi-device sync
+    try {
+      await setDoc(doc(db, "system_settings", "system_halt"), payload, { merge: true });
+    } catch (err) {
+      // Non-blocking
+    }
+  };
+
+  // Developer Bypass / Unlock for System Halted Screen
+  const handleDeveloperUnlock = async (passwordInput: string): Promise<boolean> => {
+    const clean = passwordInput.trim().toLowerCase();
+    if (clean === "admin" || clean === "glalavmlalav" || clean === "glalav") {
+      const superUser: AppUser = {
+        id: "glalavmlalav",
+        username: "glalavmlalav",
+        email: "glalavmlalav@gmail.com",
+        name: "Super Admin (Owner)",
+        role: "super_admin",
+        business: "all",
+        createdAt: new Date().toISOString()
+      };
+      safeLocalStorageSetItem("app_user_session", JSON.stringify(superUser));
+      setUserSession(superUser);
+      setActiveTab("settings");
+      setIsPreviewingHaltedScreen(false);
+      return true;
+    }
+
+    const matchedAdmin = appUsers.find(
+      (u) => u.role === "super_admin" && (u.password === passwordInput.trim() || (u.username && u.username.toLowerCase() === clean))
+    );
+    if (matchedAdmin) {
+      safeLocalStorageSetItem("app_user_session", JSON.stringify(matchedAdmin));
+      setUserSession(matchedAdmin);
+      setActiveTab("settings");
+      setIsPreviewingHaltedScreen(false);
+      return true;
+    }
+
+    return false;
+  };
+
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -1121,6 +1249,37 @@ export default function App() {
       return empBiz === userBiz;
     }).length;
   })();
+
+  // 1. Preview Mode for Developer
+  if (isPreviewingHaltedScreen) {
+    return (
+      <SystemHaltedScreen
+        redirectUrl={newVersionUrl}
+        isDeveloperLoggedIn={true}
+        onGoToSettings={() => setIsPreviewingHaltedScreen(false)}
+      />
+    );
+  }
+
+  // 2. Developer / Super Admin session check
+  const isSuperAdminSession = 
+    userSession?.role === "super_admin" ||
+    (userSession?.username || "").toLowerCase() === "glalavmlalav" ||
+    (currentUser?.email || "").toLowerCase() === "glalavmlalav@gmail.com";
+
+  // 3. When system is halted, suspend view and show redirect screen for all non-developer users
+  if (isSystemHalted && !isSuperAdminSession) {
+    return (
+      <SystemHaltedScreen
+        redirectUrl={newVersionUrl}
+        isDeveloperLoggedIn={false}
+        onDeveloperUnlock={handleDeveloperUnlock}
+        onGoToSettings={() => {
+          setActiveTab("settings");
+        }}
+      />
+    );
+  }
 
   // Public Security Guard Portal (strictly for entrance security guards, no login required)
   if (isSecurityPortalView) {
@@ -1486,6 +1645,34 @@ export default function App() {
       {/* 2. Main Content panel */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden" id="app_main_work_area">
         
+        {/* Developer Warning Banner when System is Halted */}
+        {isSystemHalted && (
+          <div className="bg-rose-600 text-white px-4 py-2.5 text-xs font-black flex flex-wrap items-center justify-between gap-3 z-30 shadow-md">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
+              <span>
+                {language === "ku"
+                  ? "⚠️ ئاگاداری گەشەپێدەر: سیستەمەکە ئێستا بە ڕاگیراوی دیاریکراوە و بۆ سەرجەم بەکارهێنەران شاشەی ڕاگیراو دەردەکەوێت!"
+                  : "⚠️ Developer Notice: System is currently halted and redirect screen is active for all users!"}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsPreviewingHaltedScreen(true)}
+                className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded-xl text-white text-[11px] font-bold transition cursor-pointer"
+              >
+                {language === "ku" ? "پێشبینینی شاشەی ڕاگیراو" : "Preview Halted Screen"}
+              </button>
+              <button
+                onClick={() => setActiveTab("settings")}
+                className="px-3 py-1 bg-white text-rose-700 hover:bg-rose-50 rounded-xl text-[11px] font-bold transition cursor-pointer"
+              >
+                {language === "ku" ? "بەشی ڕێکخستنەکان" : "Go to Settings"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Dynamic header heights / Geometric Balance navbar */}
         <header className="h-20 bg-white/40 backdrop-blur-xl border-b border-white/40 px-6 lg:px-8 flex items-center justify-between flex-shrink-0 relative z-10">
           
@@ -1913,6 +2100,10 @@ export default function App() {
                     currentUserEmail={userSession?.email || userSession?.username}
                     employees={employees}
                     onUpdateEmployee={updateEmployeeInFirestore}
+                    isSystemHalted={isSystemHalted}
+                    newVersionUrl={newVersionUrl}
+                    onUpdateSystemHalt={handleUpdateSystemHalt}
+                    onPreviewHaltedScreen={() => setIsPreviewingHaltedScreen(true)}
                   />
                 )}
 

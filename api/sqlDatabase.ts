@@ -465,7 +465,7 @@ export function sqlInsertOrUpdateMessage(msg: any) {
 // System Settings
 export function sqlInsertOrUpdateSettings(settings: any) {
   const db = getSqliteDb();
-  const id = "branding";
+  const id = settings.id || "general";
   const updatedAt = new Date().toISOString();
 
   const stmt = db.prepare(`

@@ -345,7 +345,14 @@ export function saveSettings(settings: any) {
     } catch (e) {}
   }
 
-  memoryState.system_settings = [settings];
+  if (!memoryState.system_settings) memoryState.system_settings = [];
+  const id = settings.id || "general";
+  const idx = memoryState.system_settings.findIndex((s: any) => s.id === id);
+  if (idx >= 0) {
+    memoryState.system_settings[idx] = { ...memoryState.system_settings[idx], ...settings };
+  } else {
+    memoryState.system_settings.push(settings);
+  }
   persistStoreMirror();
   return settings;
 }

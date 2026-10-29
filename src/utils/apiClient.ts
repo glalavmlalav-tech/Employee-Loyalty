@@ -42,18 +42,23 @@ export async function apiSaveEmployee(emp: Employee): Promise<Employee> {
 }
 
 export async function apiUpdateEmployee(id: string, partial: Partial<Employee>): Promise<Employee> {
-  const res = await fetch(`/api/employees/${encodeURIComponent(id)}`, {
+  const cleanId = (id || "").trim();
+  const payload = { ...partial, id: cleanId };
+  const res = await fetch(`/api/employees/${encodeURIComponent(cleanId)}?id=${encodeURIComponent(cleanId)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(partial),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error("Failed to update employee");
   return res.json();
 }
 
 export async function apiDeleteEmployee(id: string): Promise<boolean> {
-  const res = await fetch(`/api/employees/${encodeURIComponent(id)}`, {
+  const cleanId = (id || "").trim();
+  const res = await fetch(`/api/employees/${encodeURIComponent(cleanId)}?id=${encodeURIComponent(cleanId)}`, {
     method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: cleanId })
   });
   if (!res.ok) throw new Error("Failed to delete employee");
   return true;
@@ -156,5 +161,15 @@ export async function apiRestoreBackup(fullData: any): Promise<{ success: boolea
 export async function apiGetSqlStatus(): Promise<{ success: boolean; engine: string; tables: Record<string, number> }> {
   const res = await fetch("/api/sql/status");
   if (!res.ok) throw new Error("Failed to fetch SQL status");
+  return res.json();
+}
+
+export async function apiSaveSettings(settings: any): Promise<any> {
+  const res = await fetch("/api/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) throw new Error("Failed to save settings");
   return res.json();
 }

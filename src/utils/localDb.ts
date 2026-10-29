@@ -83,11 +83,73 @@ export function stripHeavyImages(employees: Employee[]): Employee[] {
   });
 }
 
-// Clean up any stale client-side deletion override traps on module evaluation
-if (typeof window !== "undefined") {
+/**
+ * Persistent Client-Side Deletion Registry
+ * Ensures user deletions (both soft-deleted to trash and permanently deleted)
+ * NEVER resurrect even if a serverless endpoint or static backup serves stale data.
+ */
+export function recordEmployeeDeleted(id: string, isPermanent = false): void {
+  if (typeof window === "undefined" || !id) return;
+  const cleanId = (id || "").trim();
   try {
-    localStorage.removeItem("corporate_persistent_deleted_ids");
+    const raw = localStorage.getItem("client_deleted_employees_map") || "{}";
+    const map = JSON.parse(raw);
+    map[cleanId] = {
+      isDeleted: true,
+      status: "deleted",
+      isPermanent: !!isPermanent,
+      timestamp: Date.now()
+    };
+    localStorage.setItem("client_deleted_employees_map", JSON.stringify(map));
   } catch (e) {}
+}
+
+export function recordEmployeeRestored(id: string): void {
+  if (typeof window === "undefined" || !id) return;
+  const cleanId = (id || "").trim();
+  try {
+    const raw = localStorage.getItem("client_deleted_employees_map") || "{}";
+    const map = JSON.parse(raw);
+    delete map[cleanId];
+    localStorage.setItem("client_deleted_employees_map", JSON.stringify(map));
+  } catch (e) {}
+}
+
+export function getClientDeletedMap(): Record<string, { isDeleted: boolean; status: string; isPermanent: boolean; timestamp: number }> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem("client_deleted_employees_map");
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return {};
+}
+
+export function applyClientDeletions(employees: Employee[]): Employee[] {
+  if (!Array.isArray(employees) || employees.length === 0) return employees;
+  const deletedMap = getClientDeletedMap();
+  if (Object.keys(deletedMap).length === 0) return employees;
+
+  const result: Employee[] = [];
+  for (const emp of employees) {
+    const cleanId = (emp.id || "").trim();
+    const delRecord = deletedMap[cleanId];
+    if (delRecord) {
+      if (delRecord.isPermanent) {
+        // Permanently deleted: exclude completely
+        continue;
+      } else {
+        // Soft-deleted: enforce deleted status so it stays in trash
+        result.push({
+          ...emp,
+          isDeleted: true,
+          status: "deleted" as any
+        });
+      }
+    } else {
+      result.push(emp);
+    }
+  }
+  return result;
 }
 
 /**
@@ -102,7 +164,7 @@ export function getInitialCachedEmployees(): Employee[] {
     if (summaryStr) {
       const parsed = JSON.parse(summaryStr);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return applyClientDeletions(parsed);
       }
     }
   } catch (e) {}
@@ -113,7 +175,7 @@ export function getInitialCachedEmployees(): Employee[] {
     if (legacyStr) {
       const parsed = JSON.parse(legacyStr);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return applyClientDeletions(parsed);
       }
     }
   } catch (e) {}

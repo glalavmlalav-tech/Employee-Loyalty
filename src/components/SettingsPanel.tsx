@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   Users, 
   UserPlus, 
@@ -23,7 +23,13 @@ import {
   RotateCcw,
   Database,
   Download,
-  ShieldCheck
+  ShieldCheck,
+  Power,
+  ExternalLink,
+  Link2,
+  ShieldAlert,
+  PauseCircle,
+  PlayCircle
 } from "lucide-react";
 import { AppUser, BusinessId, BUSINESSES, Employee } from "../types";
 import { compressImageBase64, needsCompression } from "../utils/imageCompression";
@@ -39,6 +45,10 @@ interface SettingsPanelProps {
   currentUserEmail?: string;
   employees?: Employee[];
   onUpdateEmployee?: (id: string, empData: Partial<Employee>) => Promise<void>;
+  isSystemHalted?: boolean;
+  newVersionUrl?: string;
+  onUpdateSystemHalt?: (isHalted: boolean, newUrl: string) => Promise<void>;
+  onPreviewHaltedScreen?: () => void;
 }
 
 export default function SettingsPanel({
@@ -48,11 +58,45 @@ export default function SettingsPanel({
   language,
   currentUserEmail,
   employees = [],
-  onUpdateEmployee
+  onUpdateEmployee,
+  isSystemHalted = false,
+  newVersionUrl = "",
+  onUpdateSystemHalt,
+  onPreviewHaltedScreen
 }: SettingsPanelProps) {
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [userToDelete, setUserToDelete] = useState<AppUser | null>(null);
+
+  // System Halt for Developer State
+  const [systemHaltedState, setSystemHaltedState] = useState<boolean>(isSystemHalted);
+  const [versionUrlState, setVersionUrlState] = useState<string>(newVersionUrl);
+  const [isSavingHalt, setIsSavingHalt] = useState(false);
+  const [haltSuccessMsg, setHaltSuccessMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isSystemHalted !== undefined) setSystemHaltedState(isSystemHalted);
+    if (newVersionUrl !== undefined) setVersionUrlState(newVersionUrl);
+  }, [isSystemHalted, newVersionUrl]);
+
+  const handleSaveHaltSettings = async () => {
+    try {
+      setIsSavingHalt(true);
+      if (onUpdateSystemHalt) {
+        await onUpdateSystemHalt(systemHaltedState, versionUrlState.trim());
+      }
+      setHaltSuccessMsg(
+        language === "ku"
+          ? (systemHaltedState ? "سیستەمەکە بە سەرکەوتوویی ڕاگیرا و ڕێنمایی وەشانی نوێ چالاککرا!" : "سیستەمەکە بە سەرکەوتوویی کارا کرایەوە و لە دۆخی ئاساییدایە!")
+          : (systemHaltedState ? "System halted and redirect screen activated!" : "System re-activated successfully!")
+      );
+      setTimeout(() => setHaltSuccessMsg(null), 3500);
+    } catch (e) {
+      alert("Error saving system halt settings");
+    } finally {
+      setIsSavingHalt(false);
+    }
+  };
   
   // Image optimizer state
   const [optimizerStatus, setOptimizerStatus] = useState<"idle" | "running" | "completed" | "error">("idle");
@@ -627,6 +671,165 @@ export default function SettingsPanel({
               {uncompressedEmployees.length > 0 && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping inline-block" />}
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* Developer System Halt & Version Redirect Panel */}
+      <div className={`glass-panel rounded-[36px] p-6 lg:p-8 space-y-6 relative overflow-hidden border shadow-sm animate-fade-in text-right font-sans transition-all duration-300 ${
+        systemHaltedState ? "border-rose-400/80 bg-rose-50/20 shadow-rose-500/5 ring-1 ring-rose-300" : "border-white/80 bg-white/70"
+      }`}>
+        <div className="flex flex-col lg:flex-row items-start justify-between gap-6 pb-6 border-b border-slate-100">
+          <div className="space-y-2 max-w-2xl">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] bg-rose-500/10 text-rose-800 font-extrabold px-3 py-1.5 rounded-full border border-rose-500/20 uppercase tracking-wider inline-flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+                {language === "ku" ? "تایبەت بە گەشەپێدەر • کۆنترۆڵی سیستەم" : "Developer Control • System State"}
+              </span>
+              <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border ${
+                systemHaltedState 
+                  ? "bg-rose-500 text-white border-rose-600 animate-pulse" 
+                  : "bg-emerald-500/10 text-emerald-700 border-emerald-300"
+              }`}>
+                {systemHaltedState 
+                  ? (language === "ku" ? "سیستەم ڕاگیراوە (Halted)" : "System Halted") 
+                  : (language === "ku" ? "سیستەم چالاکە (Active)" : "System Operational")}
+              </span>
+            </div>
+
+            <h3 className="text-xl md:text-2xl font-display font-black text-slate-800 flex items-center gap-2">
+              <Power className={`w-6 h-6 ${systemHaltedState ? "text-rose-600" : "text-slate-600"}`} />
+              <span>{language === "ku" ? "ڕاگرتنی سیستەم و ئاراستەکردن بۆ وەشانی نوێ" : "Halt System & Redirect to New Version"}</span>
+            </h3>
+
+            <p className="text-slate-500 text-xs md:text-sm leading-relaxed">
+              {language === "ku"
+                ? "هەرکات ئەم بۆتۆمە پێبکەیت، تەواوی سیستەمەکە ڕادەگیرێت و شاشەیەکی سپی بەتاڵ بە پەیامی ئاراستەکردن و دوگمەی گەورەی «بڕۆ Go» پێشان دەدرێت بۆ بەکارهێنەران بۆ چوونە سەر وەشانی نوێ."
+                : "When enabled by the developer, the entire system is suspended and displays a clean screen with the redirect notice and large 'بڕۆ Go' button."}
+            </p>
+          </div>
+
+          {/* Quick Preview Button */}
+          {onPreviewHaltedScreen && (
+            <button
+              type="button"
+              onClick={onPreviewHaltedScreen}
+              className="px-4 py-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold rounded-2xl flex items-center gap-2 transition cursor-pointer self-start lg:self-auto shrink-0"
+              title={language === "ku" ? "پێشبینیکردنی شاشەکە وەک چۆن بەکارهێنەران دەیبینن" : "Preview screen as users see it"}
+            >
+              <ExternalLink className="w-4 h-4 text-slate-500" />
+              <span>{language === "ku" ? "پێشبینینی شاشەی ڕاگیراو" : "Preview Halted Screen"}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Status Messages */}
+        {haltSuccessMsg && (
+          <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-2xl flex items-center gap-2 animate-fade-in shadow-xs">
+            <Check className="w-4 h-4 text-emerald-600 shrink-0 stroke-[3]" />
+            <span>{haltSuccessMsg}</span>
+          </div>
+        )}
+
+        {/* Toggle Switch and URL Input Controls */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+          {/* Halt Toggle Switch */}
+          <div className="md:col-span-5 bg-white/80 p-5 rounded-3xl border border-slate-200/80 shadow-xs flex items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-black text-slate-800 block">
+                {language === "ku" ? "بۆتۆمی ڕاگرتنی سیستەم:" : "System Halt Switch:"}
+              </span>
+              <span className="text-[11px] text-slate-500 mt-0.5 block font-medium">
+                {systemHaltedState 
+                  ? (language === "ku" ? "سیستەم ئێستا لەسەر وەشانی ڕاگیراودایە" : "System is currently suspended")
+                  : (language === "ku" ? "سیستەم بە تەواوی کراوەیە و کار دەکات" : "System is normal and accessible")}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSystemHaltedState(!systemHaltedState)}
+              className={`relative inline-flex h-8 w-16 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                systemHaltedState ? "bg-rose-600 shadow-md shadow-rose-500/30" : "bg-slate-300"
+              }`}
+              role="switch"
+              aria-checked={systemHaltedState}
+            >
+              <span
+                className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  systemHaltedState ? "-translate-x-8" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* New Version URL Input */}
+          <div className="md:col-span-7 bg-white/80 p-5 rounded-3xl border border-slate-200/80 shadow-xs space-y-2">
+            <label className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+              <Link2 className="w-4 h-4 text-indigo-600" />
+              <span>{language === "ku" ? "خانەی دانانی بەستەری وەشانی نوێ (New Version URL):" : "New Version URL:"}</span>
+            </label>
+            <div className="relative">
+              <input
+                type="url"
+                value={versionUrlState}
+                onChange={(e) => setVersionUrlState(e.target.value)}
+                placeholder="https://lenya-v2.vercel.app یان بەستەری نوێ بنووسە..."
+                className="w-full pl-4 pr-10 py-3 bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 focus:border-indigo-500 rounded-2xl text-xs sm:text-sm font-mono text-slate-800 transition focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                dir="ltr"
+              />
+              <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
+                <ExternalLink className="w-4 h-4" />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-400 font-medium">
+              {language === "ku" 
+                ? "ئەو بەستەرەیە کە دوگمەی گەورەی «بڕۆ Go» بەکارهێنەرانی ڕاستەوخۆ بۆ دەبات." 
+                : "The destination address when users click the big 'بڕۆ Go' button."}
+            </p>
+          </div>
+        </div>
+
+        {/* Save Changes Button */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+          <div className="text-[11px] text-slate-500 font-medium text-right">
+            {systemHaltedState ? (
+              <span className="text-rose-600 font-bold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4" />
+                {language === "ku"
+                  ? "ئاگاداربە: بە پاشەکەوتکردن، هەموو بەکارهێنەران تەنیا شاشەی ڕاگیراو دەبینن!"
+                  : "Warning: Once saved, all users will immediately see the suspended screen!"}
+              </span>
+            ) : (
+              <span className="text-emerald-700 font-bold flex items-center gap-1.5">
+                <Check className="w-4 h-4" />
+                {language === "ku"
+                  ? "سیستەم ئاساییە، سەرجەم بەشەکان لەبەردەستن."
+                  : "System is in normal operation mode."}
+              </span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSaveHaltSettings}
+            disabled={isSavingHalt}
+            className={`px-8 py-3.5 text-white text-xs font-black rounded-2xl flex items-center gap-2.5 shadow-lg transition duration-200 cursor-pointer active:scale-95 disabled:opacity-50 ${
+              systemHaltedState 
+                ? "bg-rose-600 hover:bg-rose-700 shadow-rose-600/25" 
+                : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/25"
+            }`}
+          >
+            {isSavingHalt ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Power className="w-4 h-4" />
+            )}
+            <span>
+              {isSavingHalt
+                ? (language === "ku" ? "پاشەکەوت دەکرێت..." : "Saving...")
+                : (language === "ku" ? "پاشەکەوتکردنی ڕێکخستنی سیستەم" : "Save System State")}
+            </span>
+          </button>
         </div>
       </div>
 
