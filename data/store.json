@@ -1758,7 +1758,7 @@
       "business": "all",
       "username": "glalavmlalav",
       "role": "super_admin",
-      "password": "admin",
+      "password": "kurd2026kurd$",
       "name": "Super Admin (glalavmlalav)",
       "createdAt": "2026-10-25T10:42:43.524Z"
     },
@@ -1932,9 +1932,9 @@
     },
     {
       "id": "system_halt",
-      "isHalted": false,
-      "newVersionUrl": "https://new-version.vercel.app",
-      "updatedAt": "2026-10-29T00:00:00.000Z"
+      "isHalted": true,
+      "newVersionUrl": "https://hrm-lenya.vercel.app/",
+      "updatedAt": "2026-10-29T12:30:00.000Z"
     }
   ]
 }

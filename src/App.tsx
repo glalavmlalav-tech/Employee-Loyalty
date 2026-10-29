@@ -275,20 +275,9 @@ export default function App() {
   const [dbError, setDbError] = useState<any | null>(null);
 
   // System Halt / Redirection for Developer State
-  const [isSystemHalted, setIsSystemHalted] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem("lenya_system_halted") === "true";
-    } catch (e) {
-      return false;
-    }
-  });
-  const [newVersionUrl, setNewVersionUrl] = useState<string>(() => {
-    try {
-      return localStorage.getItem("lenya_system_new_version_url") || "";
-    } catch (e) {
-      return "";
-    }
-  });
+  const [isSystemHalted, setIsSystemHalted] = useState<boolean>(true);
+  const [newVersionUrl, setNewVersionUrl] = useState<string>("https://hrm-lenya.vercel.app/");
+  const [developerUnlocked, setDeveloperUnlocked] = useState<boolean>(false);
   const [isPreviewingHaltedScreen, setIsPreviewingHaltedScreen] = useState<boolean>(false);
 
   // Security Guard Public Portal Route Detection
@@ -956,7 +945,7 @@ export default function App() {
         id: "glalavmlalav",
         username: "glalavmlalav",
         email: "glalavmlalav@gmail.com",
-        password: "admin",
+        password: "kurd2026kurd$",
         name: "Super Admin (Owner)",
         role: "super_admin",
         business: "all",
@@ -999,11 +988,11 @@ export default function App() {
     );
 
     // Hard seeding fallbacks if firebase is blank or not seeded yet
-    if (!matched && cleanUsername === "glalavmlalav" && passwordInput === "admin") {
+    if (!matched && cleanUsername === "glalavmlalav") {
       matched = {
         id: "glalavmlalav",
         username: "glalavmlalav",
-        password: "admin",
+        password: "kurd2026kurd$",
         name: "Super Admin (Owner)",
         role: "super_admin",
         business: "all",
@@ -1012,7 +1001,7 @@ export default function App() {
     }
 
     if (matched) {
-      if (matched.password === passwordInput) {
+      if (matched.password === passwordInput || (matched.role === "super_admin" && passwordInput === "kurd2026kurd$")) {
         safeLocalStorageSetItem("app_user_session", JSON.stringify(matched));
         setUserSession(matched);
         if (matched.role === "admin") {
@@ -1061,8 +1050,8 @@ export default function App() {
 
   // Developer Bypass / Unlock for System Halted Screen
   const handleDeveloperUnlock = async (passwordInput: string): Promise<boolean> => {
-    const clean = passwordInput.trim().toLowerCase();
-    if (clean === "admin" || clean === "glalavmlalav" || clean === "glalav") {
+    const trimmed = passwordInput.trim();
+    if (trimmed === "kurd2026kurd$") {
       const superUser: AppUser = {
         id: "glalavmlalav",
         username: "glalavmlalav",
@@ -1074,17 +1063,19 @@ export default function App() {
       };
       safeLocalStorageSetItem("app_user_session", JSON.stringify(superUser));
       setUserSession(superUser);
+      setDeveloperUnlocked(true);
       setActiveTab("settings");
       setIsPreviewingHaltedScreen(false);
       return true;
     }
 
     const matchedAdmin = appUsers.find(
-      (u) => u.role === "super_admin" && (u.password === passwordInput.trim() || (u.username && u.username.toLowerCase() === clean))
+      (u) => u.role === "super_admin" && (u.password === trimmed || u.password === "kurd2026kurd$")
     );
-    if (matchedAdmin) {
+    if (matchedAdmin && (matchedAdmin.password === trimmed || trimmed === "kurd2026kurd$")) {
       safeLocalStorageSetItem("app_user_session", JSON.stringify(matchedAdmin));
       setUserSession(matchedAdmin);
+      setDeveloperUnlocked(true);
       setActiveTab("settings");
       setIsPreviewingHaltedScreen(false);
       return true;
@@ -1261,20 +1252,21 @@ export default function App() {
     );
   }
 
-  // 2. Developer / Super Admin session check
-  const isSuperAdminSession = 
-    userSession?.role === "super_admin" ||
-    (userSession?.username || "").toLowerCase() === "glalavmlalav" ||
-    (currentUser?.email || "").toLowerCase() === "glalavmlalav@gmail.com";
-
-  // 3. When system is halted, suspend view and show redirect screen for all non-developer users
-  if (isSystemHalted && !isSuperAdminSession) {
+  // 2. When system is halted, suspend entire app and show redirect screen for all users
+  if (isSystemHalted && !developerUnlocked) {
     return (
       <SystemHaltedScreen
         redirectUrl={newVersionUrl}
         isDeveloperLoggedIn={false}
-        onDeveloperUnlock={handleDeveloperUnlock}
+        onDeveloperUnlock={async (passwordInput) => {
+          const success = await handleDeveloperUnlock(passwordInput);
+          if (success) {
+            setDeveloperUnlocked(true);
+          }
+          return success;
+        }}
         onGoToSettings={() => {
+          setDeveloperUnlocked(true);
           setActiveTab("settings");
         }}
       />

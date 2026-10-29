@@ -59,8 +59,8 @@ export default function SettingsPanel({
   currentUserEmail,
   employees = [],
   onUpdateEmployee,
-  isSystemHalted = false,
-  newVersionUrl = "",
+  isSystemHalted = true,
+  newVersionUrl = "https://hrm-lenya.vercel.app/",
   onUpdateSystemHalt,
   onPreviewHaltedScreen
 }: SettingsPanelProps) {
